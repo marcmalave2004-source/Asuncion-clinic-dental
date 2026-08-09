@@ -1,0 +1,32 @@
+# Copy to config/config.yaml and adjust. This file has no secrets in it and
+# is safe to commit; API keys and live-trading toggles live in .env instead.
+
+exchange:
+  id: binance          # any ccxt exchange id (binance, kraken, coinbase, ...)
+  market_type: spot     # spot only - this bot does not short or use leverage
+  symbol: BTC/USDT
+  timeframe: 1h
+  use_testnet: true     # keep true until you are deliberately going live
+
+strategy:
+  ema_fast: 12
+  ema_slow: 26
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  atr_period: 14
+  atr_stop_mult: 2.0    # stop-loss = entry - ATR * atr_stop_mult
+  atr_target_mult: 3.0  # take-profit = entry + ATR * atr_target_mult
+
+risk:
+  risk_per_trade_pct: 1.0    # max % of balance lost if stop-loss is hit
+  max_daily_loss_pct: 5.0    # kill switch: halt new entries for the day past this drawdown
+  max_open_positions: 1
+  min_order_quote: 10.0      # skip trades below this notional (exchange minimums)
+  taker_fee_pct: 0.1
+
+runtime:
+  poll_interval_seconds: 60
+  dry_run: true          # true = simulate only, log/store trades, place nothing real
+  state_dir: state
+  stop_file: STOP         # create a file with this name to halt the bot immediately
