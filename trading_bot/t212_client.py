@@ -1,25 +1,27 @@
 """REST client for the Trading 212 public API (Invest / Stocks ISA accounts
 only - not available for CFD or SIPP accounts).
 
-*** AUTHENTICATION IS UNVERIFIED - READ THIS BEFORE GOING LIVE ***
-docs.trading212.com was unreachable from the environment this client was
-written in, so the exact auth header format below was inferred from
-third-party SDKs/reverse-engineering writeups that disagreed with each
-other (single API key vs. an API key+secret pair with HTTP Basic Auth).
-This client defaults to HTTP Basic Auth (api_key as username, api_secret as
-password if one is configured) and falls back to sending the raw key in the
-Authorization header when no secret is set.
+Verified against the official docs (docs.trading212.com/api), general
+information section, as pasted in by the user on 2026-08-12:
 
-Before trusting this with real money:
-  1. Generate an API key in the Trading 212 app (Settings -> API) and note
-     whether it gives you one key or a key+secret pair.
-  2. Call `Trading212Client.verify_connection()` (wraps a read-only account
-     endpoint) and confirm it returns your real account data.
-  3. If it 401s, check docs.trading212.com/api yourself and adjust
-     `_auth_header()` below to match - it's the only place auth happens.
+- Auth: HTTP Basic Auth, API Key as username / API Secret as password
+  (scheme "authWithSecretKey"). There's also a documented legacy scheme
+  ("legacyApiKeyHeader") that sends the raw key in the Authorization header
+  with no secret - this client uses Basic Auth whenever a secret is
+  configured and falls back to the legacy raw-key header otherwise.
+- Base URLs: https://demo.trading212.com/api/v0 (paper) and
+  https://live.trading212.com/api/v0 (live).
+- Orders execute only in the account's primary currency; multi-currency
+  accounts are not supported by the API.
+- Rate limits are per-account and vary per endpoint (see method docstrings);
+  responses include x-ratelimit-* headers.
 
-Endpoint paths (account cash, market orders) are similarly best-effort from
-secondary sources and should be cross-checked against the official docs.
+One thing that's still a best-effort guess: the exact JSON field names in
+the /equity/account/summary response - the docs describe it narratively
+("available funds, invested capital, total account value") without a
+literal example payload. `Trading212Broker.fetch_free_balance` (broker.py)
+therefore checks a few plausible key names and raises a clear error listing
+the actual keys it saw if none match, rather than silently returning 0.
 """
 from __future__ import annotations
 
@@ -38,6 +40,7 @@ BASE_URLS = {
 }
 
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+MAX_RATE_LIMIT_WAIT_SECONDS = 60.0
 
 
 class Trading212Error(RuntimeError):
@@ -60,6 +63,17 @@ class Trading212Client:
             return {"Authorization": f"Basic {token}"}
         return {"Authorization": self.api_key}
 
+    def _retry_delay(self, resp: requests.Response, attempt: int) -> float:
+        if resp.status_code == 429:
+            reset_at = resp.headers.get("x-ratelimit-reset")
+            if reset_at:
+                try:
+                    wait = float(reset_at) - time.time()
+                    return max(0.5, min(wait, MAX_RATE_LIMIT_WAIT_SECONDS))
+                except ValueError:
+                    pass
+        return 1.0 * (2 ** (attempt - 1))
+
     def _request(self, method: str, path: str, retries: int = 3, **kwargs):
         url = f"{self.base_url}{path}"
         headers = {**self._auth_header(), "Content-Type": "application/json"}
@@ -78,12 +92,12 @@ class Trading212Client:
 
             if resp.status_code == 401:
                 raise Trading212Error(
-                    "401 Unauthorized from Trading 212 API - the auth header format in "
-                    "t212_client.py is unverified against the official docs; check "
-                    "docs.trading212.com/api and adjust _auth_header() if needed."
+                    "401 Unauthorized from Trading 212 API - double-check your "
+                    "TRADING212_API_KEY/TRADING212_API_SECRET in .env and that the key "
+                    "has the right permissions and environment (demo vs live)."
                 )
             if resp.status_code in RETRYABLE_STATUS and attempt < retries:
-                delay = 1.0 * (2 ** (attempt - 1))
+                delay = self._retry_delay(resp, attempt)
                 log.warning("T212 %s %s returned %d - retrying in %.1fs",
                             method, path, resp.status_code, delay)
                 time.sleep(delay)
@@ -97,17 +111,26 @@ class Trading212Client:
 
     def verify_connection(self) -> dict:
         """Read-only sanity check - safe to call even against a live key."""
-        return self.get_account_cash()
+        return self.get_account_summary()
 
-    def get_account_cash(self) -> dict:
-        return self._request("GET", "/equity/account/cash")
+    def get_account_summary(self) -> dict:
+        """GET /equity/account/summary - rate limit: 1 req / 5s."""
+        return self._request("GET", "/equity/account/summary")
 
-    def get_portfolio(self) -> list:
-        return self._request("GET", "/equity/portfolio")
+    def get_positions(self) -> list:
+        """GET /equity/positions - rate limit: 1 req / 1s."""
+        return self._request("GET", "/equity/positions")
 
-    def place_market_order(self, ticker: str, quantity: float) -> dict:
-        """quantity > 0 buys, quantity < 0 sells (T212 API convention)."""
-        return self._request("POST", "/equity/orders/market", json={"ticker": ticker, "quantity": quantity})
+    def get_pending_orders(self) -> dict:
+        """GET /equity/orders - rate limit: 1 req / 5s."""
+        return self._request("GET", "/equity/orders")
+
+    def place_market_order(self, ticker: str, quantity: float, extended_hours: bool = False) -> dict:
+        """POST /equity/orders/market - rate limit: 50 req / 1m.
+        quantity > 0 buys, quantity < 0 sells (T212 API convention)."""
+        body = {"ticker": ticker, "quantity": quantity, "extendedHours": extended_hours}
+        return self._request("POST", "/equity/orders/market", json=body)
 
     def cancel_order(self, order_id: str | int) -> None:
+        """DELETE /equity/orders/{id} - rate limit: 50 req / 1m."""
         self._request("DELETE", f"/equity/orders/{order_id}")

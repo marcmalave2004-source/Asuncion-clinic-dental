@@ -28,17 +28,31 @@ class CcxtBroker:
         return self.exchange.create_market_order(symbol, side, amount_precise)
 
 
+CASH_FIELD_CANDIDATES = ("free", "cash", "available", "availableFunds", "blended")
+
+
 class Trading212Broker:
     def __init__(self, client, ticker: str):
         self.client = client
         self.ticker = ticker
 
     def fetch_free_balance(self) -> float:
-        cash = self.client.get_account_cash()
-        # Best-effort key lookup - confirm the exact response shape against
-        # the official docs (see t212_client.py header) before relying on
-        # this for live sizing decisions.
-        return float(cash.get("free") or cash.get("cash") or 0.0)
+        summary = self.client.get_account_summary()
+        # The official docs describe /equity/account/summary narratively
+        # ("available funds, invested capital, total account value") without
+        # a literal example payload, so the exact field name is a guess from
+        # a plausible set rather than a single confirmed key. Some T212
+        # responses nest this under a "cash" object, so check both levels.
+        cash_obj = summary.get("cash", summary) if isinstance(summary.get("cash"), dict) else summary
+        for key in CASH_FIELD_CANDIDATES:
+            if key in cash_obj:
+                return float(cash_obj[key])
+        raise ValueError(
+            f"Could not find a free-cash field in the T212 account summary response. "
+            f"Top-level keys were: {list(summary.keys())}. Inspect the real response "
+            f"(e.g. via `check-broker`) and add the right key name to CASH_FIELD_CANDIDATES "
+            f"in trading_bot/broker.py."
+        )
 
     def create_market_order(self, symbol: str, side: str, amount: float) -> dict:
         signed_qty = amount if side == "buy" else -amount

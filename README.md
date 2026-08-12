@@ -126,31 +126,38 @@ siguiente (las posiciones abiertas se siguen gestionando con su stop-loss).
 cp config/config.trading212.example.yaml config/config.yaml
 ```
 
-### ⚠️ Antes de nada: la autenticación no está verificada
+### Autenticación (confirmada contra la documentación oficial)
 
-No pude acceder a `docs.trading212.com` desde el entorno donde escribí este
-código (la red del sandbox lo bloqueaba), así que el formato exacto de la
-cabecera de autenticación en `t212_client.py` viene de fuentes de terceros
-que **se contradecían entre sí** (una API key sola vs. un par API
-key+secret con HTTP Basic Auth). Por defecto, el cliente usa Basic Auth si
-configuras un secret, y si no, manda la key sin más en `Authorization`.
+- **Auth:** HTTP Basic, con tu **API Key** como usuario y tu **API Secret**
+  como contraseña (`Authorization: Basic base64(key:secret)`). Si tu key no
+  viene con secreto, el cliente usa el esquema legacy y manda la key sola en
+  `Authorization`. Ya está implementado así por defecto en `t212_client.py`.
+- **Entornos:** `https://demo.trading212.com/api/v0` (paper) y
+  `https://live.trading212.com/api/v0` (real).
+- **Solo funciona con cuentas Invest y Stocks ISA**, y las órdenes solo se
+  ejecutan en la **moneda principal de la cuenta** (cuentas multi-divisa no
+  están soportadas por la API).
+- El nombre exacto del campo de "cash disponible" dentro de la respuesta de
+  `/equity/account/summary` no venía documentado con un ejemplo JSON literal,
+  así que `broker.py` prueba varios nombres plausibles (`free`, `cash`,
+  `available`, `availableFunds`) y, si no encuentra ninguno, lanza un error
+  claro listando las claves reales que sí llegaron — corre `check-broker`
+  primero para verlo:
 
-**Antes de confiar en esto con dinero real:**
+```bash
+python -m trading_bot.main check-broker
+```
 
-1. Genera una API key en la app de Trading 212 (cuenta Invest o ISA →
-   Ajustes → API) y fíjate si te da una sola clave o un par clave+secreto.
-2. Pon lo que te haya dado en `.env` (`TRADING212_API_KEY` /
-   `TRADING212_API_SECRET`).
-3. Corre el chequeo de solo lectura (no coloca ninguna orden):
-   ```bash
-   python -m trading_bot.main check-broker
-   ```
-4. Si falla con 401, entra a `docs.trading212.com/api` tú mismo y ajusta
-   `_auth_header()` en `trading_bot/t212_client.py` según el formato real.
+(Solo lee tu balance, no coloca ninguna orden — seguro de correr incluso con
+una API key de la cuenta real.)
 
-También verifica el formato exacto del ticker de tu instrumento (usé
-`AAPL_US_EQ` como ejemplo — confírmalo contra el endpoint de instrumentos o
-la documentación) antes de intentar colocar una orden real.
+También confirma el ticker exacto de tu instrumento contra
+`GET /equity/metadata/instruments` — usé `AAPL_US_EQ` como ejemplo en el
+config, que sigue el patrón `SYMBOL_MERCADO_EQ`.
+
+**Recomendación de seguridad adicional:** Trading 212 permite restringir tu
+API key a un conjunto de IPs concretas desde los ajustes de tu cuenta — hazlo
+si vas a correr el bot desde un servidor con IP fija.
 
 ### Limitaciones de la API pública de Trading 212
 

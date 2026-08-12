@@ -1,4 +1,5 @@
 import base64
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,7 +22,7 @@ def test_invalid_environment_rejected():
         Trading212Client(api_key="k", environment="staging")
 
 
-def test_auth_header_without_secret_sends_raw_key():
+def test_auth_header_without_secret_sends_legacy_raw_key():
     client = _client(api_secret=None)
     assert client._auth_header() == {"Authorization": "test-key"}
 
@@ -33,19 +34,33 @@ def test_auth_header_with_secret_sends_basic_auth():
     assert header == {"Authorization": f"Basic {expected_token}"}
 
 
-def test_get_account_cash_hits_expected_endpoint(monkeypatch):
+def test_get_account_summary_hits_expected_endpoint(monkeypatch):
     client = _client()
     mock_response = MagicMock(status_code=200, ok=True, content=b'{"free": 1234.5}')
     mock_response.json.return_value = {"free": 1234.5}
     mock_request = MagicMock(return_value=mock_response)
     monkeypatch.setattr(client._session, "request", mock_request)
 
-    result = client.get_account_cash()
+    result = client.get_account_summary()
 
     assert result == {"free": 1234.5}
     called_method, called_url = mock_request.call_args[0]
     assert called_method == "GET"
-    assert called_url == "https://demo.trading212.com/api/v0/equity/account/cash"
+    assert called_url == "https://demo.trading212.com/api/v0/equity/account/summary"
+
+
+def test_get_positions_hits_expected_endpoint(monkeypatch):
+    client = _client()
+    mock_response = MagicMock(status_code=200, ok=True, content=b"[]")
+    mock_response.json.return_value = []
+    mock_request = MagicMock(return_value=mock_response)
+    monkeypatch.setattr(client._session, "request", mock_request)
+
+    client.get_positions()
+
+    called_method, called_url = mock_request.call_args[0]
+    assert called_method == "GET"
+    assert called_url == "https://demo.trading212.com/api/v0/equity/positions"
 
 
 def test_place_market_order_sends_signed_quantity(monkeypatch):
@@ -58,7 +73,7 @@ def test_place_market_order_sends_signed_quantity(monkeypatch):
     client.place_market_order("AAPL_US_EQ", -5.0)
 
     _, kwargs = mock_request.call_args
-    assert kwargs["json"] == {"ticker": "AAPL_US_EQ", "quantity": -5.0}
+    assert kwargs["json"] == {"ticker": "AAPL_US_EQ", "quantity": -5.0, "extendedHours": False}
 
 
 def test_401_raises_trading212_error_with_helpful_message(monkeypatch):
@@ -67,7 +82,7 @@ def test_401_raises_trading212_error_with_helpful_message(monkeypatch):
     monkeypatch.setattr(client._session, "request", MagicMock(return_value=mock_response))
 
     with pytest.raises(Trading212Error, match="401 Unauthorized"):
-        client.get_account_cash()
+        client.get_account_summary()
 
 
 def test_retryable_status_is_retried_then_succeeds(monkeypatch):
@@ -77,9 +92,23 @@ def test_retryable_status_is_retried_then_succeeds(monkeypatch):
     success.json.return_value = {}
     mock_request = MagicMock(side_effect=[failing, success])
     monkeypatch.setattr(client._session, "request", mock_request)
-    monkeypatch.setattr("time.sleep", lambda *_: None)
+    monkeypatch.setattr(time, "sleep", lambda *_: None)
 
-    result = client.get_account_cash()
+    result = client.get_account_summary()
 
     assert result == {}
     assert mock_request.call_count == 2
+
+
+def test_429_retry_delay_uses_ratelimit_reset_header():
+    client = _client()
+    resp = MagicMock(status_code=429, headers={"x-ratelimit-reset": str(time.time() + 10)})
+    delay = client._retry_delay(resp, attempt=1)
+    assert 8 <= delay <= 10.5
+
+
+def test_429_retry_delay_falls_back_to_exponential_backoff_without_header():
+    client = _client()
+    resp = MagicMock(status_code=429, headers={})
+    assert client._retry_delay(resp, attempt=1) == 1.0
+    assert client._retry_delay(resp, attempt=3) == 4.0

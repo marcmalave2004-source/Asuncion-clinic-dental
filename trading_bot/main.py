@@ -65,8 +65,7 @@ def backtest(ctx: click.Context, since: str, until: str | None, balance: float):
 def check_broker(ctx: click.Context):
     """Read-only sanity check: confirms broker credentials/auth work by
     fetching your account's free cash balance. Places no orders - safe to
-    run against a live API key. Useful for Trading 212 since its auth
-    header format is unverified in this codebase (see t212_client.py)."""
+    run against a live API key."""
     from trading_bot.broker import build_broker
 
     settings = ctx.obj["settings"]
@@ -77,6 +76,15 @@ def check_broker(ctx: click.Context):
         exchange_client = ExchangeClient(settings)
 
     broker = build_broker(settings, exchange_client)
+
+    if settings.exchange.provider == "trading212":
+        # Print the raw response too: the exact field name for free cash in
+        # /equity/account/summary wasn't shown in the docs excerpt this
+        # client was built from, so this lets you eyeball it directly if
+        # fetch_free_balance() can't find a matching key.
+        raw = broker.client.get_account_summary()
+        click.echo(f"Raw account summary: {raw}")
+
     balance = broker.fetch_free_balance()
     click.echo(f"Connected OK via provider={settings.exchange.provider}. Free balance: {balance}")
 

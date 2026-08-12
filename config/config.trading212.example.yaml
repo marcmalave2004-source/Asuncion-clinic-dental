@@ -2,10 +2,10 @@
 # Stocks ISA account only - CFD and SIPP accounts are not supported by the
 # public API). Copy to config/config.yaml to use it.
 #
-# IMPORTANT: the Trading 212 broker integration's authentication is
-# unverified against the official docs (see trading_bot/t212_client.py for
-# why) - run `python -m trading_bot.main check-broker` first to confirm your
-# API key actually authenticates before trusting anything else here.
+# Run `python -m trading_bot.main check-broker` first to confirm your API
+# key authenticates and to see the raw account summary response - the exact
+# field name for free cash isn't documented with a literal example, so
+# broker.py guesses from a few plausible names (see README > Trading 212).
 
 exchange:
   provider: trading212

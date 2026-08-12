@@ -43,11 +43,26 @@ def test_trading212_broker_buys_use_positive_quantity():
     client.place_market_order.assert_called_once_with("AAPL_US_EQ", 3.0)
 
 
-def test_trading212_broker_reads_free_cash():
+def test_trading212_broker_reads_free_cash_top_level():
     client = MagicMock()
-    client.get_account_cash.return_value = {"free": 999.0}
+    client.get_account_summary.return_value = {"free": 999.0}
     broker = Trading212Broker(client, ticker="AAPL_US_EQ")
     assert broker.fetch_free_balance() == 999.0
+
+
+def test_trading212_broker_reads_free_cash_nested_under_cash_object():
+    client = MagicMock()
+    client.get_account_summary.return_value = {"cash": {"free": 500.0}, "invested": {"value": 1000.0}}
+    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    assert broker.fetch_free_balance() == 500.0
+
+
+def test_trading212_broker_raises_clear_error_when_no_known_field_found():
+    client = MagicMock()
+    client.get_account_summary.return_value = {"someUnexpectedField": 1}
+    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    with pytest.raises(ValueError, match="Could not find a free-cash field"):
+        broker.fetch_free_balance()
 
 
 def test_build_broker_selects_trading212_and_requires_ticker():
