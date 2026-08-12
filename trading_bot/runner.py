@@ -6,10 +6,11 @@ import time
 
 import pandas as pd
 
+from trading_bot.broker import build_broker
 from trading_bot.config import Settings
-from trading_bot.exchange import ExchangeClient
 from trading_bot.executor import OrderExecutor, StopFileTriggered, check_stop_file
 from trading_bot.logger import get_logger
+from trading_bot.market_data import build_market_data
 from trading_bot.portfolio import Position, PositionStore
 from trading_bot.risk import DailyLossKillSwitch, compute_stop_and_target, size_position
 from trading_bot.storage import TradeStore
@@ -17,37 +18,36 @@ from trading_bot.strategy import Signal, prepare, signal_for_row
 
 log = get_logger(__name__)
 
-OHLCV_COLUMNS = ["timestamp", "open", "high", "low", "close", "volume"]
 
-
-def _fetch_recent_df(exchange: ExchangeClient, symbol: str, timeframe: str, limit: int = 200) -> pd.DataFrame:
-    rows = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-    return pd.DataFrame(rows, columns=OHLCV_COLUMNS)
-
-
-def _get_quote_balance(exchange: ExchangeClient, quote_ccy: str, dry_run: bool, fallback: float = 1000.0) -> float:
+def _get_balance(broker, dry_run: bool, fallback: float = 1000.0) -> float:
     if dry_run:
         # In dry-run there's no real account to size against; use a fixed
-        # paper balance so backtona-style sizing math stays exercised.
+        # paper balance so the position-sizing math stays exercised.
         return fallback
-    balance = exchange.fetch_balance()
-    return float(balance.get("free", {}).get(quote_ccy, 0.0))
+    return broker.fetch_free_balance()
 
 
 def run_loop(settings: Settings, max_iterations: int | None = None) -> None:
-    exchange = ExchangeClient(settings)
+    exchange_client = None
+    if settings.exchange.provider == "ccxt":
+        from trading_bot.exchange import ExchangeClient
+
+        exchange_client = ExchangeClient(settings)
+
+    market_data = build_market_data(settings, exchange_client)
+    broker = build_broker(settings, exchange_client)
+
     store = TradeStore()
     position_store = PositionStore()
-    executor = OrderExecutor(settings, exchange, store)
+    executor = OrderExecutor(settings, broker, store)
     kill_switch = DailyLossKillSwitch(settings.risk)
 
     symbol = settings.exchange.symbol
-    quote_ccy = symbol.split("/")[-1]
     dry_run = settings.effective_dry_run
 
     log.info(
-        "Starting %s trading loop for %s on %s (dry_run=%s)",
-        settings.exchange.market_type, symbol, settings.exchange.id, dry_run,
+        "Starting trading loop for %s via provider=%s (dry_run=%s)",
+        symbol, settings.exchange.provider, dry_run,
     )
     if not dry_run:
         log.warning("LIVE TRADING IS ACTIVE - real orders with real funds will be placed.")
@@ -60,14 +60,14 @@ def run_loop(settings: Settings, max_iterations: int | None = None) -> None:
         try:
             check_stop_file(settings)
 
-            df = _fetch_recent_df(exchange, symbol, settings.exchange.timeframe)
+            df = market_data.fetch_recent(symbol, settings.exchange.timeframe)
             if len(df) < 2:
                 time.sleep(settings.runtime.poll_interval_seconds)
                 continue
 
             prepared = prepare(df, settings.strategy)
             current_price = float(prepared.iloc[-1]["close"])
-            balance = _get_quote_balance(exchange, quote_ccy, dry_run)
+            balance = _get_balance(broker, dry_run)
             equity = balance if position is None else balance + position.amount * current_price
 
             store.record_equity(equity)

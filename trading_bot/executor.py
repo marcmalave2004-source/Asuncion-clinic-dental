@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from trading_bot.broker import BrokerClient
 from trading_bot.config import Settings
-from trading_bot.exchange import ExchangeClient
 from trading_bot.logger import get_logger
 from trading_bot.storage import TradeRecord, TradeStore
 
@@ -33,9 +33,9 @@ def check_stop_file(settings: Settings) -> None:
 
 
 class OrderExecutor:
-    def __init__(self, settings: Settings, exchange: ExchangeClient, store: TradeStore):
+    def __init__(self, settings: Settings, broker: BrokerClient, store: TradeStore):
         self.settings = settings
-        self.exchange = exchange
+        self.broker = broker
         self.store = store
 
     def _assert_live_authorized(self):
@@ -77,12 +77,11 @@ class OrderExecutor:
             "LIVE ORDER %s %s amount=%.8f price~=%.2f sl=%s tp=%s note=%s",
             side.upper(), symbol, amount, price_hint, stop_loss, take_profit, note,
         )
-        amount_precise = self.exchange.amount_to_precision(symbol, amount)
-        order = self.exchange.create_market_order(symbol, side, amount_precise)
+        order = self.broker.create_market_order(symbol, side, amount)
         filled_price = float(order.get("average") or order.get("price") or price_hint)
         self.store.record_trade(
             TradeRecord(
-                symbol=symbol, side=side, amount=amount_precise, price=filled_price,
+                symbol=symbol, side=side, amount=amount, price=filled_price,
                 stop_loss=stop_loss, take_profit=take_profit, dry_run=False, note=note,
             )
         )

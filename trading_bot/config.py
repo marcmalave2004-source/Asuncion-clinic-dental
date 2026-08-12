@@ -24,11 +24,17 @@ LIVE_CONFIRM_PHRASE = "I_ACCEPT_THE_RISK"
 
 @dataclass
 class ExchangeConfig:
-    id: str = "binance"
+    provider: str = "ccxt"  # "ccxt" (crypto exchanges) or "trading212" (stocks/ETFs)
+    id: str = "binance"  # ccxt exchange id - ignored when provider is "trading212"
     market_type: str = "spot"  # "spot" or "future"
-    symbol: str = "BTC/USDT"
+    symbol: str = "BTC/USDT"  # ccxt symbol, or the Yahoo Finance ticker (e.g. "AAPL") for trading212
     timeframe: str = "1h"
-    use_testnet: bool = True
+    use_testnet: bool = True  # ccxt sandbox mode - ignored for trading212
+
+    # trading212 provider only:
+    t212_ticker: str | None = None  # T212 instrument code for order placement, e.g. "AAPL_US_EQ"
+    t212_environment: str = "demo"  # "demo" (paper, no real money) or "live"
+    data_symbol: str | None = None  # override the Yahoo Finance ticker if it differs from `symbol`
 
 
 @dataclass
@@ -101,9 +107,13 @@ def load_settings(config_path: str | os.PathLike = "config/config.yaml") -> Sett
     risk = RiskConfig(**raw.get("risk", {}))
     runtime = RuntimeConfig(**raw.get("runtime", {}))
 
-    exchange_id = exchange.id.upper()
-    api_key = os.getenv(f"{exchange_id}_API_KEY") or os.getenv("EXCHANGE_API_KEY")
-    api_secret = os.getenv(f"{exchange_id}_API_SECRET") or os.getenv("EXCHANGE_API_SECRET")
+    if exchange.provider == "trading212":
+        api_key = os.getenv("TRADING212_API_KEY")
+        api_secret = os.getenv("TRADING212_API_SECRET")  # only set if your key comes with a secret
+    else:
+        exchange_id = exchange.id.upper()
+        api_key = os.getenv(f"{exchange_id}_API_KEY") or os.getenv("EXCHANGE_API_KEY")
+        api_secret = os.getenv(f"{exchange_id}_API_SECRET") or os.getenv("EXCHANGE_API_SECRET")
 
     live_requested = os.getenv("LIVE_TRADING", "false").strip().lower() == "true"
     live_confirmed = os.getenv("LIVE_TRADING_CONFIRM", "") == LIVE_CONFIRM_PHRASE

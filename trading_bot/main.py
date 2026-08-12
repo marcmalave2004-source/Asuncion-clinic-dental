@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 import click
 
 from trading_bot.config import LIVE_CONFIRM_PHRASE, load_settings
-from trading_bot.exchange import ExchangeClient
 from trading_bot.logger import get_logger
 
 log = get_logger(__name__)
@@ -34,17 +33,24 @@ def cli(ctx: click.Context, config_path: str):
 @click.pass_context
 def backtest(ctx: click.Context, since: str, until: str | None, balance: float):
     """Run the strategy against historical data - no orders, no API keys needed
-    for public exchanges."""
-    from trading_bot.backtester import fetch_historical_ohlcv, run_backtest
+    for public exchanges or for the trading212 provider (uses Yahoo Finance)."""
+    from trading_bot.backtester import run_backtest
+    from trading_bot.market_data import build_market_data
 
     settings = ctx.obj["settings"]
     since_ms = int(datetime.fromisoformat(since).replace(tzinfo=timezone.utc).timestamp() * 1000)
     until_dt = datetime.fromisoformat(until).replace(tzinfo=timezone.utc) if until else datetime.now(timezone.utc)
     until_ms = int(until_dt.timestamp() * 1000)
 
-    exchange = ExchangeClient(settings)
+    exchange_client = None
+    if settings.exchange.provider == "ccxt":
+        from trading_bot.exchange import ExchangeClient
+
+        exchange_client = ExchangeClient(settings)
+    market_data = build_market_data(settings, exchange_client)
+
     click.echo(f"Fetching {settings.exchange.symbol} {settings.exchange.timeframe} history...")
-    df = fetch_historical_ohlcv(exchange, settings.exchange.symbol, settings.exchange.timeframe, since_ms, until_ms)
+    df = market_data.fetch_historical(settings.exchange.symbol, settings.exchange.timeframe, since_ms, until_ms)
     if df.empty:
         click.echo("No historical data returned - check symbol/timeframe/date range.")
         sys.exit(1)
@@ -52,6 +58,27 @@ def backtest(ctx: click.Context, since: str, until: str | None, balance: float):
     click.echo(f"Got {len(df)} candles. Running backtest...")
     result = run_backtest(df, settings.strategy, settings.risk, initial_balance=balance)
     click.echo(result.summary())
+
+
+@cli.command(name="check-broker")
+@click.pass_context
+def check_broker(ctx: click.Context):
+    """Read-only sanity check: confirms broker credentials/auth work by
+    fetching your account's free cash balance. Places no orders - safe to
+    run against a live API key. Useful for Trading 212 since its auth
+    header format is unverified in this codebase (see t212_client.py)."""
+    from trading_bot.broker import build_broker
+
+    settings = ctx.obj["settings"]
+    exchange_client = None
+    if settings.exchange.provider == "ccxt":
+        from trading_bot.exchange import ExchangeClient
+
+        exchange_client = ExchangeClient(settings)
+
+    broker = build_broker(settings, exchange_client)
+    balance = broker.fetch_free_balance()
+    click.echo(f"Connected OK via provider={settings.exchange.provider}. Free balance: {balance}")
 
 
 @cli.command()

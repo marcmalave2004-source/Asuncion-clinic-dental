@@ -15,7 +15,10 @@ futuros. **Esto no es asesoría financiera.**
 ```
 trading_bot/
   config.py      configuración (config/config.yaml + variables de entorno)
-  exchange.py    wrapper sobre ccxt (funciona con ~100 exchanges)
+  exchange.py    wrapper sobre ccxt (crypto - ~100 exchanges)
+  t212_client.py cliente REST de Trading 212 (acciones/ETFs) - ver aviso de auth abajo
+  market_data.py datos OHLCV: ccxt para crypto, Yahoo Finance para Trading 212
+  broker.py      abstracción de cuenta/órdenes sobre ccxt o Trading 212
   indicators.py  EMA, RSI, ATR
   strategy.py    lógica de señales (compra/venta/mantener)
   risk.py        tamaño de posición por % de riesgo, stop/target, kill switch diario
@@ -24,8 +27,17 @@ trading_bot/
   storage.py     registro de operaciones y equity en SQLite (auditoría)
   backtester.py  simulación contra datos históricos
   runner.py      loop de trading en vivo/paper
-  main.py        CLI (backtest / run --mode paper|live)
+  main.py        CLI (backtest / run --mode paper|live / check-broker)
 ```
+
+Dos "brokers" soportados, seleccionados con `exchange.provider` en `config.yaml`:
+
+| | `provider: ccxt` | `provider: trading212` |
+|---|---|---|
+| Mercado | Cripto (spot) | Acciones y ETFs |
+| Exchange/broker | ~100 vía ccxt (Binance por defecto) | Trading 212 (cuenta Invest o Stocks ISA) |
+| Datos de precio (velas) | El propio exchange | Yahoo Finance (T212 no expone histórico) |
+| Testnet/paper propio del broker | Sí (sandbox de ccxt, según exchange) | Sí (entorno demo de T212) |
 
 ## Instalación
 
@@ -107,6 +119,68 @@ El bot también trae un **kill switch automático de pérdida diaria**: si el
 equity cae más del `risk.max_daily_loss_pct` configurado respecto al balance
 al inicio del día (UTC), deja de abrir posiciones nuevas hasta el día
 siguiente (las posiciones abiertas se siguen gestionando con su stop-loss).
+
+## Trading 212 (acciones/ETFs)
+
+```bash
+cp config/config.trading212.example.yaml config/config.yaml
+```
+
+### ⚠️ Antes de nada: la autenticación no está verificada
+
+No pude acceder a `docs.trading212.com` desde el entorno donde escribí este
+código (la red del sandbox lo bloqueaba), así que el formato exacto de la
+cabecera de autenticación en `t212_client.py` viene de fuentes de terceros
+que **se contradecían entre sí** (una API key sola vs. un par API
+key+secret con HTTP Basic Auth). Por defecto, el cliente usa Basic Auth si
+configuras un secret, y si no, manda la key sin más en `Authorization`.
+
+**Antes de confiar en esto con dinero real:**
+
+1. Genera una API key en la app de Trading 212 (cuenta Invest o ISA →
+   Ajustes → API) y fíjate si te da una sola clave o un par clave+secreto.
+2. Pon lo que te haya dado en `.env` (`TRADING212_API_KEY` /
+   `TRADING212_API_SECRET`).
+3. Corre el chequeo de solo lectura (no coloca ninguna orden):
+   ```bash
+   python -m trading_bot.main check-broker
+   ```
+4. Si falla con 401, entra a `docs.trading212.com/api` tú mismo y ajusta
+   `_auth_header()` en `trading_bot/t212_client.py` según el formato real.
+
+También verifica el formato exacto del ticker de tu instrumento (usé
+`AAPL_US_EQ` como ejemplo — confírmalo contra el endpoint de instrumentos o
+la documentación) antes de intentar colocar una orden real.
+
+### Limitaciones de la API pública de Trading 212
+
+- **Solo cuentas Invest y Stocks ISA.** Las cuentas CFD (apalancamiento,
+  posiciones cortas) y SIPP no están soportadas por la API pública — el bot
+  no puede operar ahí.
+- **Sin datos históricos de velas.** Por eso `market_data.py` usa Yahoo
+  Finance (gratis, sin API key) para calcular EMA/RSI/ATR, y la API de T212
+  se usa solo para consultar balance y colocar/cancelar órdenes.
+- **Solo long, sin apalancamiento**, igual que en el lado cripto — compras y
+  vendes acciones/ETFs, nunca en corto.
+- Yahoo Finance limita cuánto histórico intradía puedes pedir (ej. ~60 días
+  para velas de 5-30 min). Por eso el config de ejemplo usa velas diarias
+  (`timeframe: 1d`), que además encaja mejor con T212 (pensado para
+  invertir, no para alta frecuencia).
+
+### Paper trading con Trading 212
+
+Tienes dos formas de probar sin arriesgar dinero real:
+
+1. **Modo `dry_run` del propio bot** (`runtime.dry_run: true`, por defecto):
+   no llama a la API de T212 en absoluto, todo se simula localmente con un
+   balance ficticio.
+2. **Entorno demo de Trading 212** (`exchange.t212_environment: demo`): si
+   pones `dry_run: false`, el bot llama de verdad a la API pero contra el
+   entorno demo de T212 (dinero simulado, gestionado por ellos). Sigue
+   necesitando pasar los gates de `LIVE_TRADING`/`LIVE_TRADING_CONFIRM`
+   descritos arriba, aunque no haya dinero real en juego — es una
+   simplificación deliberada para no tener dos caminos de código distintos
+   para "llamar a la API de verdad".
 
 ## Seguridad de credenciales
 
