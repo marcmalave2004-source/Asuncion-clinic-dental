@@ -14,7 +14,7 @@ exchange:
   data_symbol: AAPL          # optional: only set if it differs from `symbol`
   t212_ticker: AAPL_US_EQ    # Trading 212 instrument code - used for order placement
   t212_environment: live     # "demo" (T212's own paper trading, no real money) or "live"
-  timeframe: 1d               # daily bars - T212/Yahoo intraday history is limited (see README)
+  timeframe: 15m              # day trading: 15-minute bars (Yahoo Finance only keeps ~60 days of this resolution for backtesting - doesn't affect live/paper running indefinitely)
 
 strategy:
   ema_fast: 8               # shorter periods = more frequent (and noisier/weaker) crossover signals
@@ -34,7 +34,7 @@ risk:
   taker_fee_pct: 0.0       # T212 is commission-free on Invest/ISA trades
 
 runtime:
-  poll_interval_seconds: 3600   # hourly is plenty for a daily-bar strategy
+  poll_interval_seconds: 300    # every 5 min - day trading needs to react faster than the hourly check used for daily bars
   dry_run: true                  # keep true until check-broker succeeds and you've paper traded
   state_dir: state
   stop_file: STOP
