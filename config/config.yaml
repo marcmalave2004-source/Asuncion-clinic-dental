@@ -17,17 +17,17 @@ exchange:
   timeframe: 1d               # daily bars - T212/Yahoo intraday history is limited (see README)
 
 strategy:
-  ema_fast: 12
-  ema_slow: 26
+  ema_fast: 8               # shorter periods = more frequent (and noisier/weaker) crossover signals
+  ema_slow: 18
   rsi_period: 14
-  rsi_overbought: 70
+  rsi_overbought: 85        # was 70 - lets more crossovers count as buys instead of being filtered out
   rsi_oversold: 30
   atr_period: 14
   atr_stop_mult: 2.0
   atr_target_mult: 3.0
 
 risk:
-  risk_per_trade_pct: 1.0
+  risk_per_trade_pct: 10.0  # was 1.0 - risks 10x more balance per trade; see chat for what this means in a losing streak
   max_daily_loss_pct: 5.0
   max_open_positions: 1
   min_order_quote: 1.0    # lowered for testing with a small balance - raise this back up before trading seriously
