@@ -57,6 +57,21 @@ def test_trading212_broker_reads_free_cash_nested_under_cash_object():
     assert broker.fetch_free_balance() == 500.0
 
 
+def test_trading212_broker_reads_real_account_summary_shape():
+    # Confirmed against a real Trading 212 account's /equity/account/summary
+    # response on 2026-08-14.
+    client = MagicMock()
+    client.get_account_summary.return_value = {
+        "id": 50044619,
+        "currency": "EUR",
+        "totalValue": 4.49,
+        "cash": {"availableToTrade": 4.49, "reservedForOrders": 0, "inPies": 0},
+        "investments": {"currentValue": 0, "totalCost": 0, "realizedProfitLoss": 0, "unrealizedProfitLoss": 0},
+    }
+    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    assert broker.fetch_free_balance() == 4.49
+
+
 def test_trading212_broker_raises_clear_error_when_no_known_field_found():
     client = MagicMock()
     client.get_account_summary.return_value = {"someUnexpectedField": 1}

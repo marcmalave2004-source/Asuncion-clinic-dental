@@ -28,7 +28,7 @@ class CcxtBroker:
         return self.exchange.create_market_order(symbol, side, amount_precise)
 
 
-CASH_FIELD_CANDIDATES = ("free", "cash", "available", "availableFunds", "blended")
+CASH_FIELD_CANDIDATES = ("availableToTrade", "free", "cash", "available", "availableFunds", "blended")
 
 
 class Trading212Broker:
@@ -38,11 +38,11 @@ class Trading212Broker:
 
     def fetch_free_balance(self) -> float:
         summary = self.client.get_account_summary()
-        # The official docs describe /equity/account/summary narratively
-        # ("available funds, invested capital, total account value") without
-        # a literal example payload, so the exact field name is a guess from
-        # a plausible set rather than a single confirmed key. Some T212
-        # responses nest this under a "cash" object, so check both levels.
+        # Confirmed against a real account's response on 2026-08-14:
+        # {"id", "currency", "totalValue", "cash": {"availableToTrade",
+        # "reservedForOrders", "inPies"}, "investments": {...}}. Checking a
+        # short candidate list (with availableToTrade first) instead of a
+        # single hardcoded key stays robust to minor response variations.
         cash_obj = summary.get("cash", summary) if isinstance(summary.get("cash"), dict) else summary
         for key in CASH_FIELD_CANDIDATES:
             if key in cash_obj:

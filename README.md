@@ -137,19 +137,23 @@ cp config/config.trading212.example.yaml config/config.yaml
 - **Solo funciona con cuentas Invest y Stocks ISA**, y las órdenes solo se
   ejecutan en la **moneda principal de la cuenta** (cuentas multi-divisa no
   están soportadas por la API).
-- El nombre exacto del campo de "cash disponible" dentro de la respuesta de
-  `/equity/account/summary` no venía documentado con un ejemplo JSON literal,
-  así que `broker.py` prueba varios nombres plausibles (`free`, `cash`,
-  `available`, `availableFunds`) y, si no encuentra ninguno, lanza un error
-  claro listando las claves reales que sí llegaron — corre `check-broker`
-  primero para verlo:
+- El campo de "cash disponible" dentro de `/equity/account/summary` está
+  confirmado contra una respuesta real: `cash.availableToTrade` (junto a
+  `reservedForOrders` e `inPies`). Ejemplo real de respuesta:
+  ```json
+  {"id": 50044619, "currency": "EUR", "totalValue": 4.49,
+   "cash": {"availableToTrade": 4.49, "reservedForOrders": 0, "inPies": 0},
+   "investments": {"currentValue": 0, "totalCost": 0, "realizedProfitLoss": 0, "unrealizedProfitLoss": 0}}
+  ```
+  `broker.py` lee `cash.availableToTrade` con un par de nombres alternativos
+  como respaldo por si tu respuesta viene con forma distinta.
+
+Verifica la conexión y tu balance con (solo lee, no coloca ninguna orden —
+seguro de correr incluso con una API key de la cuenta real):
 
 ```bash
 python -m trading_bot.main check-broker
 ```
-
-(Solo lee tu balance, no coloca ninguna orden — seguro de correr incluso con
-una API key de la cuenta real.)
 
 También confirma el ticker exacto de tu instrumento contra
 `GET /equity/metadata/instruments` — usé `AAPL_US_EQ` como ejemplo en el
