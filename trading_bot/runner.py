@@ -13,6 +13,7 @@ from trading_bot.logger import get_logger
 from trading_bot.market_data import build_market_data
 from trading_bot.portfolio import Position, PositionStore
 from trading_bot.risk import DailyLossKillSwitch, compute_stop_and_target, size_position
+from trading_bot.session import is_near_session_close
 from trading_bot.storage import TradeStore
 from trading_bot.strategy import Signal, prepare, signal_for_row
 
@@ -77,12 +78,16 @@ def run_loop(settings: Settings, max_iterations: int | None = None) -> None:
                     settings.risk.max_daily_loss_pct,
                 )
             else:
+                near_close = is_near_session_close(settings.session)
+
                 if position is not None:
                     reason = position.exit_reason(current_price)
                     if reason is None:
                         prev_row, curr_row = prepared.iloc[-2], prepared.iloc[-1]
                         if signal_for_row(prev_row, curr_row, settings.strategy) == Signal.SELL:
                             reason = "signal"
+                    if reason is None and near_close:
+                        reason = "session_close"
 
                     if reason is not None:
                         executor.place_order(
@@ -91,7 +96,7 @@ def run_loop(settings: Settings, max_iterations: int | None = None) -> None:
                         position = None
                         position_store.save(None)
 
-                elif not kill_switch.triggered:
+                elif not kill_switch.triggered and not near_close:
                     prev_row, curr_row = prepared.iloc[-2], prepared.iloc[-1]
                     sig = signal_for_row(prev_row, curr_row, settings.strategy)
                     if sig == Signal.BUY:

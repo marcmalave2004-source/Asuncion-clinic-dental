@@ -37,3 +37,14 @@ runtime:
   dry_run: true                  # keep true until check-broker succeeds and you've paper traded
   state_dir: state
   stop_file: STOP
+
+session:
+  enabled: false   # only useful for intraday/day trading (see below) - irrelevant for this daily-bar swing setup
+  # For day trading: set timeframe above to something intraday (e.g. "15m"),
+  # lower poll_interval_seconds (e.g. 300), and enable this block so open
+  # positions get force-closed before the market shuts, instead of holding
+  # overnight where a stop-loss can't protect against a gap:
+  #   enabled: true
+  #   timezone: America/New_York   # AAPL/most US tickers trade on this timezone
+  #   close_time: "16:00"
+  #   close_buffer_minutes: 15

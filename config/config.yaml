@@ -38,3 +38,9 @@ runtime:
   dry_run: true                  # keep true until check-broker succeeds and you've paper traded
   state_dir: state
   stop_file: STOP
+
+session:
+  enabled: true                   # force-close any open position before the market closes - avoids overnight gap risk
+  timezone: America/New_York      # AAPL trades on NASDAQ/NYSE, both on US Eastern time
+  close_time: "16:00"              # US market close
+  close_buffer_minutes: 15         # exit 15 min early so the closing order has time to fill

@@ -67,11 +67,25 @@ class RuntimeConfig:
 
 
 @dataclass
+class SessionConfig:
+    """Forces any open position closed before the market closes, so a day
+    trading strategy doesn't hold positions overnight where a stop-loss
+    can't protect against a gap. Disabled by default - only meaningful for
+    intraday strategies on markets that actually close (irrelevant for 24/7
+    crypto)."""
+    enabled: bool = False
+    timezone: str = "America/New_York"  # IANA tz name, e.g. US equities trade in this timezone
+    close_time: str = "16:00"  # HH:MM local time the market closes
+    close_buffer_minutes: int = 15  # force-exit this many minutes before close, so the order has time to fill
+
+
+@dataclass
 class Settings:
     exchange: ExchangeConfig = field(default_factory=ExchangeConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    session: SessionConfig = field(default_factory=SessionConfig)
 
     api_key: str | None = None
     api_secret: str | None = None
@@ -106,6 +120,7 @@ def load_settings(config_path: str | os.PathLike = "config/config.yaml") -> Sett
     strategy = StrategyConfig(**raw.get("strategy", {}))
     risk = RiskConfig(**raw.get("risk", {}))
     runtime = RuntimeConfig(**raw.get("runtime", {}))
+    session = SessionConfig(**raw.get("session", {}))
 
     if exchange.provider == "trading212":
         api_key = os.getenv("TRADING212_API_KEY")
@@ -123,6 +138,7 @@ def load_settings(config_path: str | os.PathLike = "config/config.yaml") -> Sett
         strategy=strategy,
         risk=risk,
         runtime=runtime,
+        session=session,
         api_key=api_key,
         api_secret=api_secret,
         live_trading_requested=live_requested,

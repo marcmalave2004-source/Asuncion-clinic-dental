@@ -23,6 +23,7 @@ trading_bot/
   strategy.py    lógica de señales (compra/venta/mantener)
   risk.py        tamaño de posición por % de riesgo, stop/target, kill switch diario
   portfolio.py   estado de la posición abierta, persistido en disco
+  session.py     cierre forzado antes del cierre de mercado (day trading)
   executor.py    único módulo que puede colocar una orden real; aplica los gates de seguridad
   storage.py     registro de operaciones y equity en SQLite (auditoría)
   backtester.py  simulación contra datos históricos
@@ -192,6 +193,32 @@ Tienes dos formas de probar sin arriesgar dinero real:
    descritos arriba, aunque no haya dinero real en juego — es una
    simplificación deliberada para no tener dos caminos de código distintos
    para "llamar a la API de verdad".
+
+### Day trading y cierre forzado antes del cierre de mercado
+
+Por defecto el bot mantiene posiciones abiertas durante días (swing
+trading). Para day trading real (abrir y cerrar operaciones dentro del
+mismo día):
+
+1. Pon `exchange.timeframe` en algo intradía, ej. `15m`.
+2. Baja `runtime.poll_interval_seconds` (ej. `300`, cada 5 min) para
+   reaccionar más rápido que con velas diarias.
+3. Activa el bloque `session` para forzar el cierre de cualquier posición
+   abierta antes de que cierre el mercado, en vez de dejarla de un día para
+   otro — un stop-loss no protege frente a un gap de apertura (el precio
+   puede saltar mucho más allá de tu stop mientras el mercado está cerrado):
+   ```yaml
+   session:
+     enabled: true
+     timezone: America/New_York   # zona horaria del mercado del ticker
+     close_time: "16:00"           # hora de cierre
+     close_buffer_minutes: 15      # cierra 15 min antes, para dar tiempo a que la orden se ejecute
+   ```
+
+`session.enabled: false` (por defecto) no afecta en nada al modo swing ni a
+cripto (mercados 24/7, sin "cierre" que forzar). No tiene en cuenta días
+festivos del mercado — como mucho, una posición se queda abierta un día
+extra en un festivo, no es motivo de fallo.
 
 ## Seguridad de credenciales
 
