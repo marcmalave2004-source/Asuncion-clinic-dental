@@ -4,17 +4,16 @@
 # template this was copied from, and config/config.example.yaml for the
 # crypto/ccxt equivalent.
 #
-# Run `python -m trading_bot.main check-broker` first to confirm your API
-# key authenticates and to see the raw account summary response - the exact
-# field name for free cash isn't documented with a literal example, so
-# broker.py guesses from a few plausible names (see README > Trading 212).
+# t212_environment is "live" here because this account's API key was
+# generated against the real account, not a separate demo account - confirmed
+# working via `python -m trading_bot.main check-broker` on 2026-08-14.
 
 exchange:
   provider: trading212
   symbol: AAPL              # Yahoo Finance ticker - used for price data (EMA/RSI/ATR)
   data_symbol: AAPL          # optional: only set if it differs from `symbol`
   t212_ticker: AAPL_US_EQ    # Trading 212 instrument code - used for order placement
-  t212_environment: demo     # "demo" (T212's own paper trading, no real money) or "live"
+  t212_environment: live     # "demo" (T212's own paper trading, no real money) or "live"
   timeframe: 1d               # daily bars - T212/Yahoo intraday history is limited (see README)
 
 strategy:
@@ -31,7 +30,7 @@ risk:
   risk_per_trade_pct: 1.0
   max_daily_loss_pct: 5.0
   max_open_positions: 1
-  min_order_quote: 10.0   # T212 supports fractional shares, so this can be small
+  min_order_quote: 1.0    # lowered for testing with a small balance - raise this back up before trading seriously
   taker_fee_pct: 0.0       # T212 is commission-free on Invest/ISA trades
 
 runtime:
