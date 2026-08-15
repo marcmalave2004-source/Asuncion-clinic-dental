@@ -220,6 +220,46 @@ cripto (mercados 24/7, sin "cierre" que forzar). No tiene en cuenta días
 festivos del mercado — como mucho, una posición se queda abierta un día
 extra en un festivo, no es motivo de fallo.
 
+### Varios instrumentos a la vez
+
+Por defecto el bot opera un solo símbolo (`exchange.symbol` /
+`exchange.t212_ticker`). Para vigilar y operar **varias acciones/ETFs en
+paralelo**, sustitúyelo por una lista `exchange.instruments`:
+
+```yaml
+exchange:
+  provider: trading212
+  timeframe: 15m
+  t212_environment: live
+  # instruments reemplaza a symbol/t212_ticker/data_symbol cuando está presente
+  instruments:
+    - symbol: AAPL              # ticker de Yahoo Finance, usado también como nombre interno
+      t212_ticker: AAPL_US_EQ    # código de instrumento de Trading 212
+    - symbol: VOO
+      t212_ticker: VOO_US_EQ
+    - symbol: MSFT
+      t212_ticker: MSFT_US_EQ
+      data_symbol: MSFT           # opcional: solo si el ticker de Yahoo difiere del symbol
+```
+
+Cada ciclo, el bot revisa la señal de **todos** los instrumentos de la
+lista. Cuántas posiciones puede tener abiertas **a la vez, en total**, lo
+controla `risk.max_open_positions` (antes existía en el config pero no se
+aplicaba de verdad — ahora sí se respeta). Si varias señales de compra
+saltan en el mismo ciclo, el balance disponible se va descontando entre
+ellas para no sobre-dimensionar las posiciones.
+
+El backtest sigue probando **un instrumento a la vez** — usa `--symbol` para
+elegir cuál de la lista:
+```bash
+python -m trading_bot.main backtest --since 2026-06-01 --until 2026-08-14 --symbol VOO
+```
+
+**Recuerda las limitaciones reales de Trading 212** (ya comentadas más
+abajo): esto amplía a más acciones/ETFs dentro de tu cuenta Invest/ISA, pero
+no habilita índices ni opciones — esos no están disponibles en la API de
+T212 sea cual sea la configuración.
+
 ## Ejecutarlo 24/7 sin ordenador propio (GitHub Actions)
 
 En vez de dejar el bot corriendo en un bucle infinito en tu máquina/Codespace

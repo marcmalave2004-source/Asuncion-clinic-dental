@@ -73,6 +73,19 @@ def test_symbol_override_is_used_instead_of_passed_symbol(monkeypatch):
         return pd.DataFrame()
 
     monkeypatch.setattr("yfinance.download", fake_download)
-    provider = YFinanceMarketData(symbol_override="MSFT")
+    provider = YFinanceMarketData(symbol_overrides={"AAPL": "MSFT"})
     provider.fetch_recent("AAPL", "1d", limit=10)
     assert captured["ticker"] == "MSFT"
+
+
+def test_symbol_without_an_override_passes_through_unchanged(monkeypatch):
+    captured = {}
+
+    def fake_download(ticker, **kwargs):
+        captured["ticker"] = ticker
+        return pd.DataFrame()
+
+    monkeypatch.setattr("yfinance.download", fake_download)
+    provider = YFinanceMarketData(symbol_overrides={"AAPL": "MSFT"})
+    provider.fetch_recent("VOO", "1d", limit=10)
+    assert captured["ticker"] == "VOO"

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from trading_bot.broker import CcxtBroker, Trading212Broker, build_broker
-from trading_bot.config import ExchangeConfig, Settings
+from trading_bot.config import ExchangeConfig, InstrumentConfig, Settings
 
 
 def test_ccxt_broker_fetch_free_balance_reads_quote_currency():
@@ -27,7 +27,7 @@ def test_ccxt_broker_create_market_order_rounds_precision_first():
 
 def test_trading212_broker_sells_use_negative_quantity():
     client = MagicMock()
-    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    broker = Trading212Broker(client, ticker_map={"AAPL": "AAPL_US_EQ"})
 
     broker.create_market_order("AAPL", "sell", 3.0)
 
@@ -36,24 +36,40 @@ def test_trading212_broker_sells_use_negative_quantity():
 
 def test_trading212_broker_buys_use_positive_quantity():
     client = MagicMock()
-    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    broker = Trading212Broker(client, ticker_map={"AAPL": "AAPL_US_EQ"})
 
     broker.create_market_order("AAPL", "buy", 3.0)
 
     client.place_market_order.assert_called_once_with("AAPL_US_EQ", 3.0)
 
 
+def test_trading212_broker_routes_each_symbol_to_its_own_ticker():
+    client = MagicMock()
+    broker = Trading212Broker(client, ticker_map={"AAPL": "AAPL_US_EQ", "VOO": "VOO_US_EQ"})
+
+    broker.create_market_order("VOO", "buy", 1.0)
+
+    client.place_market_order.assert_called_once_with("VOO_US_EQ", 1.0)
+
+
+def test_trading212_broker_raises_on_unmapped_symbol():
+    client = MagicMock()
+    broker = Trading212Broker(client, ticker_map={"AAPL": "AAPL_US_EQ"})
+    with pytest.raises(ValueError, match="MSFT"):
+        broker.create_market_order("MSFT", "buy", 1.0)
+
+
 def test_trading212_broker_reads_free_cash_top_level():
     client = MagicMock()
     client.get_account_summary.return_value = {"free": 999.0}
-    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    broker = Trading212Broker(client, ticker_map={"AAPL": "AAPL_US_EQ"})
     assert broker.fetch_free_balance() == 999.0
 
 
 def test_trading212_broker_reads_free_cash_nested_under_cash_object():
     client = MagicMock()
     client.get_account_summary.return_value = {"cash": {"free": 500.0}, "invested": {"value": 1000.0}}
-    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    broker = Trading212Broker(client, ticker_map={"AAPL": "AAPL_US_EQ"})
     assert broker.fetch_free_balance() == 500.0
 
 
@@ -68,14 +84,14 @@ def test_trading212_broker_reads_real_account_summary_shape():
         "cash": {"availableToTrade": 4.49, "reservedForOrders": 0, "inPies": 0},
         "investments": {"currentValue": 0, "totalCost": 0, "realizedProfitLoss": 0, "unrealizedProfitLoss": 0},
     }
-    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    broker = Trading212Broker(client, ticker_map={"AAPL": "AAPL_US_EQ"})
     assert broker.fetch_free_balance() == 4.49
 
 
 def test_trading212_broker_raises_clear_error_when_no_known_field_found():
     client = MagicMock()
     client.get_account_summary.return_value = {"someUnexpectedField": 1}
-    broker = Trading212Broker(client, ticker="AAPL_US_EQ")
+    broker = Trading212Broker(client, ticker_map={"AAPL": "AAPL_US_EQ"})
     with pytest.raises(ValueError, match="Could not find a free-cash field"):
         broker.fetch_free_balance()
 
@@ -84,6 +100,18 @@ def test_build_broker_selects_trading212_and_requires_ticker():
     settings = Settings(exchange=ExchangeConfig(provider="trading212", t212_ticker=None))
     with pytest.raises(ValueError, match="t212_ticker"):
         build_broker(settings)
+
+
+def test_build_broker_builds_ticker_map_for_multiple_instruments():
+    settings = Settings(exchange=ExchangeConfig(
+        provider="trading212",
+        instruments=[
+            InstrumentConfig(symbol="AAPL", t212_ticker="AAPL_US_EQ"),
+            InstrumentConfig(symbol="VOO", t212_ticker="VOO_US_EQ"),
+        ],
+    ))
+    broker = build_broker(settings)
+    assert broker.ticker_map == {"AAPL": "AAPL_US_EQ", "VOO": "VOO_US_EQ"}
 
 
 def test_build_broker_selects_ccxt_and_requires_exchange_client():

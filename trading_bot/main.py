@@ -30,14 +30,27 @@ def cli(ctx: click.Context, config_path: str):
 @click.option("--since", required=True, help="Start date, e.g. 2023-01-01")
 @click.option("--until", default=None, help="End date, e.g. 2024-01-01 (default: now)")
 @click.option("--balance", default=1000.0, show_default=True, help="Initial paper balance in quote currency")
+@click.option(
+    "--symbol", default=None,
+    help="Which configured instrument to backtest (see exchange.instruments in config.yaml). "
+         "Defaults to the first one configured. The backtester tests one instrument at a time.",
+)
 @click.pass_context
-def backtest(ctx: click.Context, since: str, until: str | None, balance: float):
+def backtest(ctx: click.Context, since: str, until: str | None, balance: float, symbol: str | None):
     """Run the strategy against historical data - no orders, no API keys needed
     for public exchanges or for the trading212 provider (uses Yahoo Finance)."""
     from trading_bot.backtester import run_backtest
     from trading_bot.market_data import build_market_data
 
     settings = ctx.obj["settings"]
+    instruments = settings.exchange.effective_instruments()
+    available_symbols = [i.symbol for i in instruments]
+    if symbol is None:
+        symbol = available_symbols[0]
+    elif symbol not in available_symbols:
+        click.echo(f"'{symbol}' isn't configured. Available: {', '.join(available_symbols)}", err=True)
+        sys.exit(1)
+
     since_ms = int(datetime.fromisoformat(since).replace(tzinfo=timezone.utc).timestamp() * 1000)
     until_dt = datetime.fromisoformat(until).replace(tzinfo=timezone.utc) if until else datetime.now(timezone.utc)
     until_ms = int(until_dt.timestamp() * 1000)
@@ -49,8 +62,8 @@ def backtest(ctx: click.Context, since: str, until: str | None, balance: float):
         exchange_client = ExchangeClient(settings)
     market_data = build_market_data(settings, exchange_client)
 
-    click.echo(f"Fetching {settings.exchange.symbol} {settings.exchange.timeframe} history...")
-    df = market_data.fetch_historical(settings.exchange.symbol, settings.exchange.timeframe, since_ms, until_ms)
+    click.echo(f"Fetching {symbol} {settings.exchange.timeframe} history...")
+    df = market_data.fetch_historical(symbol, settings.exchange.timeframe, since_ms, until_ms)
     if df.empty:
         click.echo("No historical data returned - check symbol/timeframe/date range.")
         sys.exit(1)

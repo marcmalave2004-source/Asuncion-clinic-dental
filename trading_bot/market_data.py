@@ -113,11 +113,11 @@ class YFinanceMarketData:
     high-frequency intraday trading.
     """
 
-    def __init__(self, symbol_override: str | None = None):
-        self.symbol_override = symbol_override
+    def __init__(self, symbol_overrides: dict[str, str] | None = None):
+        self.symbol_overrides = symbol_overrides or {}  # our display symbol -> Yahoo ticker, when they differ
 
     def _resolve_symbol(self, symbol: str) -> str:
-        return self.symbol_override or symbol
+        return self.symbol_overrides.get(symbol, symbol)
 
     def fetch_recent(self, symbol: str, timeframe: str, limit: int = 200) -> pd.DataFrame:
         import yfinance as yf
@@ -146,7 +146,12 @@ class YFinanceMarketData:
 def build_market_data(settings, exchange_client=None) -> MarketDataProvider:
     """exchange_client is required (and only used) for provider == 'ccxt'."""
     if settings.exchange.provider == "trading212":
-        return YFinanceMarketData(symbol_override=settings.exchange.data_symbol)
+        overrides = {
+            i.symbol: i.data_symbol
+            for i in settings.exchange.effective_instruments()
+            if i.data_symbol and i.data_symbol != i.symbol
+        }
+        return YFinanceMarketData(symbol_overrides=overrides)
 
     if exchange_client is None:
         raise ValueError("exchange_client is required for the ccxt provider")

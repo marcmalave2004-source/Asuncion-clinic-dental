@@ -1,8 +1,8 @@
-"""Tracks the bot's own view of open positions.
+"""Tracks the bot's own view of open positions, one per symbol.
 
 Deliberately independent from exchange-reported positions: the bot only
-ever manages the single position it opened itself, and checks stop-loss /
-take-profit against live price on every loop iteration.
+ever manages positions it opened itself, and checks stop-loss / take-profit
+against live price on every loop iteration.
 """
 from __future__ import annotations
 
@@ -31,20 +31,18 @@ class Position:
 
 
 class PositionStore:
-    """Persists the open position (if any) to disk so a bot restart doesn't
-    lose track of a real position it holds on the exchange."""
+    """Persists open positions (keyed by symbol) to disk so a bot restart
+    doesn't lose track of what it actually holds on the exchange."""
 
-    def __init__(self, path: str = "state/position.json"):
+    def __init__(self, path: str = "state/positions.json"):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def load(self) -> Position | None:
+    def load_all(self) -> dict[str, Position]:
         if not self.path.exists():
-            return None
-        data = json.loads(self.path.read_text())
-        if data is None:
-            return None
-        return Position(**data)
+            return {}
+        data = json.loads(self.path.read_text()) or {}
+        return {symbol: Position(**fields) for symbol, fields in data.items()}
 
-    def save(self, position: Position | None) -> None:
-        self.path.write_text(json.dumps(asdict(position) if position else None))
+    def save_all(self, positions: dict[str, Position]) -> None:
+        self.path.write_text(json.dumps({symbol: asdict(p) for symbol, p in positions.items()}))

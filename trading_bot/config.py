@@ -23,18 +23,44 @@ LIVE_CONFIRM_PHRASE = "I_ACCEPT_THE_RISK"
 
 
 @dataclass
+class InstrumentConfig:
+    """One tradable instrument. `symbol` is what strategy/risk/logging use
+    throughout the bot (a ccxt symbol, or a Yahoo Finance ticker for
+    trading212); `t212_ticker` is only needed for the trading212 provider,
+    to map that symbol to T212's own instrument code for order placement."""
+    symbol: str
+    t212_ticker: str | None = None
+    data_symbol: str | None = None  # override the Yahoo Finance ticker if it differs from `symbol`
+
+
+@dataclass
 class ExchangeConfig:
     provider: str = "ccxt"  # "ccxt" (crypto exchanges) or "trading212" (stocks/ETFs)
     id: str = "binance"  # ccxt exchange id - ignored when provider is "trading212"
     market_type: str = "spot"  # "spot" or "future"
-    symbol: str = "BTC/USDT"  # ccxt symbol, or the Yahoo Finance ticker (e.g. "AAPL") for trading212
+    symbol: str = "BTC/USDT"  # single-instrument shorthand - ignored if `instruments` is set
     timeframe: str = "1h"
     use_testnet: bool = True  # ccxt sandbox mode - ignored for trading212
 
     # trading212 provider only:
-    t212_ticker: str | None = None  # T212 instrument code for order placement, e.g. "AAPL_US_EQ"
+    t212_ticker: str | None = None  # single-instrument shorthand - ignored if `instruments` is set
     t212_environment: str = "demo"  # "demo" (paper, no real money) or "live"
-    data_symbol: str | None = None  # override the Yahoo Finance ticker if it differs from `symbol`
+    data_symbol: str | None = None  # single-instrument shorthand - ignored if `instruments` is set
+
+    # Multiple instruments to trade in the same run, e.g.:
+    #   instruments:
+    #     - symbol: AAPL
+    #       t212_ticker: AAPL_US_EQ
+    #     - symbol: VOO
+    #       t212_ticker: VOO_US_EQ
+    # Leave empty to use the single symbol/t212_ticker/data_symbol fields
+    # above instead (backwards compatible with existing configs).
+    instruments: list[InstrumentConfig] = field(default_factory=list)
+
+    def effective_instruments(self) -> list[InstrumentConfig]:
+        if self.instruments:
+            return self.instruments
+        return [InstrumentConfig(symbol=self.symbol, t212_ticker=self.t212_ticker, data_symbol=self.data_symbol)]
 
 
 @dataclass
@@ -116,7 +142,11 @@ def _load_yaml(path: Path) -> dict:
 def load_settings(config_path: str | os.PathLike = "config/config.yaml") -> Settings:
     raw = _load_yaml(Path(config_path))
 
-    exchange = ExchangeConfig(**raw.get("exchange", {}))
+    exchange_raw = dict(raw.get("exchange", {}))
+    instruments_raw = exchange_raw.pop("instruments", None) or []
+    exchange = ExchangeConfig(**exchange_raw)
+    exchange.instruments = [InstrumentConfig(**instrument) for instrument in instruments_raw]
+
     strategy = StrategyConfig(**raw.get("strategy", {}))
     risk = RiskConfig(**raw.get("risk", {}))
     runtime = RuntimeConfig(**raw.get("runtime", {}))

@@ -32,9 +32,9 @@ CASH_FIELD_CANDIDATES = ("availableToTrade", "free", "cash", "available", "avail
 
 
 class Trading212Broker:
-    def __init__(self, client, ticker: str):
+    def __init__(self, client, ticker_map: dict[str, str]):
         self.client = client
-        self.ticker = ticker
+        self.ticker_map = ticker_map  # our display symbol (e.g. "AAPL") -> T212 instrument code
 
     def fetch_free_balance(self) -> float:
         summary = self.client.get_account_summary()
@@ -55,8 +55,10 @@ class Trading212Broker:
         )
 
     def create_market_order(self, symbol: str, side: str, amount: float) -> dict:
+        if symbol not in self.ticker_map:
+            raise ValueError(f"No t212_ticker configured for symbol {symbol!r} - check exchange.instruments")
         signed_qty = amount if side == "buy" else -amount
-        return self.client.place_market_order(self.ticker, signed_qty)
+        return self.client.place_market_order(self.ticker_map[symbol], signed_qty)
 
 
 def build_broker(settings: Settings, exchange_client=None):
@@ -66,14 +68,18 @@ def build_broker(settings: Settings, exchange_client=None):
     if settings.exchange.provider == "trading212":
         from trading_bot.t212_client import Trading212Client
 
-        if not settings.exchange.t212_ticker:
-            raise ValueError("exchange.t212_ticker must be set in config.yaml for the trading212 provider")
+        instruments = settings.exchange.effective_instruments()
+        missing = [i.symbol for i in instruments if not i.t212_ticker]
+        if missing:
+            raise ValueError(f"t212_ticker must be set for every instrument - missing for: {missing}")
+        ticker_map = {i.symbol: i.t212_ticker for i in instruments}
+
         client = Trading212Client(
             api_key=settings.api_key,
             api_secret=settings.api_secret,
             environment=settings.exchange.t212_environment,
         )
-        return Trading212Broker(client, settings.exchange.t212_ticker)
+        return Trading212Broker(client, ticker_map)
 
     if exchange_client is None:
         raise ValueError("exchange_client is required for the ccxt provider")

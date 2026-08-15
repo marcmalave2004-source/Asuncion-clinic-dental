@@ -14,6 +14,14 @@ exchange:
   t212_ticker: AAPL_US_EQ    # Trading 212 instrument code - used for order placement
   t212_environment: demo     # "demo" (T212's own paper trading, no real money) or "live"
   timeframe: 1d               # daily bars - T212/Yahoo intraday history is limited (see README)
+  # To trade several instruments at once instead of just one, replace the
+  # symbol/t212_ticker/data_symbol fields above with a list (see README >
+  # "Varios instrumentos a la vez"):
+  # instruments:
+  #   - symbol: AAPL
+  #     t212_ticker: AAPL_US_EQ
+  #   - symbol: VOO
+  #     t212_ticker: VOO_US_EQ
 
 strategy:
   ema_fast: 12
