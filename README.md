@@ -220,6 +220,56 @@ cripto (mercados 24/7, sin "cierre" que forzar). No tiene en cuenta días
 festivos del mercado — como mucho, una posición se queda abierta un día
 extra en un festivo, no es motivo de fallo.
 
+## Ejecutarlo 24/7 sin ordenador propio (GitHub Actions)
+
+En vez de dejar el bot corriendo en un bucle infinito en tu máquina/Codespace
+(que se para si cierras la sesión), `run --mode ... --iterations N` permite
+correr un número fijo de ciclos y salir — el workflow
+`.github/workflows/trading-bot.yml` usa esto para ejecutar **una sola
+iteración cada ~5 minutos** vía GitHub Actions, gratis, sin necesitar
+ningún servidor propio ni tarjeta de crédito.
+
+Como cada ejecución de Actions es una máquina nueva sin disco persistente,
+el estado del bot (posición abierta, registro de operaciones, kill switch
+diario) se guarda en la carpeta `state/` y el propio workflow lo comitea de
+vuelta al repositorio al final de cada ejecución, para que la siguiente
+ejecución lo recupere.
+
+### Configurar
+
+1. En GitHub, ve a tu repositorio → **Settings** → **Secrets and variables**
+   → **Actions** → **New repository secret**, y añade estos cuatro secretos
+   (mismos nombres y valores que ya tienes en tu `.env` local):
+   - `TRADING212_API_KEY`
+   - `TRADING212_API_SECRET`
+   - `LIVE_TRADING` → `true`
+   - `LIVE_TRADING_CONFIRM` → `I_ACCEPT_THE_RISK`
+2. Sube `config/config.yaml` con `runtime.dry_run: false` (ya debería estarlo
+   si vienes de probarlo en real).
+3. Ve a la pestaña **Actions** del repo. Si es la primera vez, puede pedirte
+   habilitar Actions para el repositorio — confírmalo.
+4. Busca el workflow **"Trading Bot"** en la lista de la izquierda y
+   actívalo si aparece deshabilitado. A partir de ahí corre solo, cada ~5
+   minutos, sin que tengas el navegador abierto.
+
+### Parar el bot
+
+La forma más simple y fiable: pestaña **Actions** → **Trading Bot** → menú
+**"..."** → **Disable workflow**. Vuelve a activarlo cuando quieras
+reanudar. El archivo `STOP` en la raíz del repo también funciona, pero solo
+hace efecto en la siguiente ejecución programada.
+
+### Limitaciones de este modo
+
+- El cron de GitHub Actions es "mejor esfuerzo": bajo mucha carga en la
+  plataforma puede retrasarse bastante más de 5 minutos. No es un
+  reloj exacto.
+- Cada ejecución hace un `git commit` + `git push` del estado — verás ese
+  historial de commits automáticos en el repo, es esperado.
+- Si corres el bot en paralelo desde tu Codespace/local **y** desde este
+  workflow al mismo tiempo, pueden pisarse el estado entre sí. Usa un solo
+  método a la vez.
+
 ## Seguridad de credenciales
 
 - Las claves de API se leen únicamente de variables de entorno (`.env`,

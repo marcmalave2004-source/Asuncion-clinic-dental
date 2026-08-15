@@ -5,8 +5,10 @@ from doing more damage than the user explicitly agreed to risk.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from trading_bot.config import RiskConfig, StrategyConfig
 
@@ -62,16 +64,41 @@ def size_position(
 
 class DailyLossKillSwitch:
     """Halts new trades for the day once realized+unrealized losses exceed
-    max_daily_loss_pct of the balance recorded at the start of the day."""
+    max_daily_loss_pct of the balance recorded at the start of the day.
 
-    def __init__(self, risk_cfg: RiskConfig):
+    Pass state_path to persist this to disk and reload it on construction -
+    needed when the bot runs as a short-lived process invoked repeatedly
+    (e.g. one GitHub Actions run per poll) rather than one long-lived loop,
+    since a fresh Python process would otherwise have no memory of the
+    day's starting equity and the kill switch would never trigger.
+    """
+
+    def __init__(self, risk_cfg: RiskConfig, state_path: str | None = None):
         self.risk_cfg = risk_cfg
+        self.state_path = Path(state_path) if state_path else None
         self._day: str | None = None
         self._start_equity: float | None = None
         self.triggered = False
+        self._load()
 
     def _today(self) -> str:
         return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    def _load(self) -> None:
+        if not self.state_path or not self.state_path.exists():
+            return
+        data = json.loads(self.state_path.read_text())
+        self._day = data.get("day")
+        self._start_equity = data.get("start_equity")
+        self.triggered = data.get("triggered", False)
+
+    def _save(self) -> None:
+        if not self.state_path:
+            return
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.state_path.write_text(json.dumps({
+            "day": self._day, "start_equity": self._start_equity, "triggered": self.triggered,
+        }))
 
     def update(self, current_equity: float) -> bool:
         """Call once per loop with current total equity. Returns True if
@@ -84,9 +111,11 @@ class DailyLossKillSwitch:
 
         assert self._start_equity is not None
         if self._start_equity <= 0:
+            self._save()
             return self.triggered
 
         drawdown_pct = (self._start_equity - current_equity) / self._start_equity * 100.0
         if drawdown_pct >= self.risk_cfg.max_daily_loss_pct:
             self.triggered = True
+        self._save()
         return self.triggered

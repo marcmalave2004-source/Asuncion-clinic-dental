@@ -41,7 +41,7 @@ def run_loop(settings: Settings, max_iterations: int | None = None) -> None:
     store = TradeStore()
     position_store = PositionStore()
     executor = OrderExecutor(settings, broker, store)
-    kill_switch = DailyLossKillSwitch(settings.risk)
+    kill_switch = DailyLossKillSwitch(settings.risk, state_path=f"{settings.runtime.state_dir}/kill_switch.json")
 
     symbol = settings.exchange.symbol
     dry_run = settings.effective_dry_run

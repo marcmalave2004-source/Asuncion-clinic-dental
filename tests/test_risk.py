@@ -56,3 +56,26 @@ def test_daily_loss_kill_switch_resets_next_day(monkeypatch):
     triggered = switch.update(current_equity=800.0)
     assert triggered is False
     assert switch._start_equity == 800.0
+
+
+def test_daily_loss_kill_switch_persists_across_fresh_instances(tmp_path):
+    state_path = str(tmp_path / "kill_switch.json")
+    risk_cfg = RiskConfig(max_daily_loss_pct=5.0)
+
+    first = DailyLossKillSwitch(risk_cfg, state_path=state_path)
+    assert first.update(current_equity=1000.0) is False
+    assert first.update(current_equity=940.0) is True  # 6% down, triggers
+
+    # A brand new process (e.g. the next GitHub Actions run) must see the
+    # same day/start_equity/triggered state instead of starting fresh.
+    second = DailyLossKillSwitch(risk_cfg, state_path=state_path)
+    assert second.triggered is True
+    assert second._start_equity == 1000.0
+    assert second._day == first._day
+
+
+def test_daily_loss_kill_switch_without_state_path_stays_in_memory_only(tmp_path):
+    risk_cfg = RiskConfig(max_daily_loss_pct=5.0)
+    switch = DailyLossKillSwitch(risk_cfg)  # no state_path - existing in-memory behavior
+    assert switch.state_path is None
+    assert switch.update(current_equity=1000.0) is False  # doesn't raise trying to save

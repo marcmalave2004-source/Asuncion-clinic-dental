@@ -92,8 +92,14 @@ def check_broker(ctx: click.Context):
 @cli.command()
 @click.option("--mode", type=click.Choice(["paper", "live"]), default="paper", show_default=True)
 @click.option("--iterations", default=None, type=int, help="Stop after N loop iterations (mainly for testing)")
+@click.option(
+    "--yes", is_flag=True, default=False,
+    help="Skip the interactive live-trading confirmation prompt. For non-interactive "
+         "automation (e.g. a GitHub Actions workflow) where there's no terminal to "
+         "answer y/N. Does NOT skip the LIVE_TRADING/LIVE_TRADING_CONFIRM env var gates.",
+)
 @click.pass_context
-def run(ctx: click.Context, mode: str, iterations: int | None):
+def run(ctx: click.Context, mode: str, iterations: int | None, yes: bool):
     """Run the bot continuously against live market data."""
     from trading_bot.runner import run_loop
 
@@ -111,10 +117,11 @@ def run(ctx: click.Context, mode: str, iterations: int | None):
                 err=True,
             )
             sys.exit(1)
-        click.confirm(
-            "You are about to start LIVE trading with real funds. Continue?",
-            abort=True,
-        )
+        if not yes:
+            click.confirm(
+                "You are about to start LIVE trading with real funds. Continue?",
+                abort=True,
+            )
 
     run_loop(settings, max_iterations=iterations)
 

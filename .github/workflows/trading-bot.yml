@@ -1,0 +1,62 @@
+name: Trading Bot
+
+# Runs one trading-loop iteration every ~5 minutes instead of keeping a
+# process running forever - GitHub Actions gives each run a fresh,
+# short-lived VM with no persistent disk, so the bot's state (open
+# position, trade log, kill-switch) is committed back to this branch at
+# the end of every run and re-loaded from the checkout on the next one.
+#
+# GitHub's schedule trigger is best-effort: under high platform load runs
+# can be delayed well past 5 minutes, sometimes by tens of minutes. Fine
+# for this bot, but don't treat the interval as exact.
+#
+# To stop the bot: disable this workflow (Actions tab -> Trading Bot ->
+# "..." -> Disable workflow) - simpler and more reliable than the STOP
+# file mechanism, which still works too (commit a file named STOP to the
+# repo root) but only takes effect on the next scheduled run.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trading-bot-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run one trading cycle
+        env:
+          TRADING212_API_KEY: ${{ secrets.TRADING212_API_KEY }}
+          TRADING212_API_SECRET: ${{ secrets.TRADING212_API_SECRET }}
+          LIVE_TRADING: ${{ secrets.LIVE_TRADING }}
+          LIVE_TRADING_CONFIRM: ${{ secrets.LIVE_TRADING_CONFIRM }}
+        run: python -m trading_bot.main run --mode live --iterations 1 --yes
+
+      - name: Persist bot state
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "trading-bot@users.noreply.github.com"
+          git add state/
+          if ! git diff --cached --quiet; then
+            git commit -m "Update bot state [skip ci]"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            echo "No state changes to commit."
+          fi

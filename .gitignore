@@ -5,6 +5,10 @@ venv/
 .env
 *.db
 *.sqlite3
+# Exception: state/trades.db is intentionally committed when running via
+# GitHub Actions (see .github/workflows/trading-bot.yml) - each run is a
+# fresh checkout, so this is the only way the trade log persists across runs.
+!state/*.db
 logs/
 STOP
 .pytest_cache/
