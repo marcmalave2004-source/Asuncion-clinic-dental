@@ -29,10 +29,27 @@ def test_sell_signal_on_bearish_crossover():
     assert signal_for_row(prev, curr, cfg) == Signal.SELL
 
 
-def test_hold_when_no_crossover():
-    cfg = StrategyConfig()
+def test_buy_signal_on_an_uptrend_already_in_progress():
+    # No fresh crossover this candle (fast was already above slow last
+    # candle too) - the bot should still buy into an ongoing uptrend
+    # instead of only reacting to the exact crossing candle.
+    cfg = StrategyConfig(rsi_overbought=70)
     prev = _row(ema_fast=10.5, ema_slow=10.0, rsi=50)
     curr = _row(ema_fast=10.6, ema_slow=10.0, rsi=50)
+    assert signal_for_row(prev, curr, cfg) == Signal.BUY
+
+
+def test_sell_signal_on_a_downtrend_already_in_progress():
+    cfg = StrategyConfig()
+    prev = _row(ema_fast=9.4, ema_slow=10.0, rsi=40)
+    curr = _row(ema_fast=9.3, ema_slow=10.0, rsi=40)
+    assert signal_for_row(prev, curr, cfg) == Signal.SELL
+
+
+def test_hold_when_trend_flat_and_rsi_overbought():
+    cfg = StrategyConfig(rsi_overbought=70)
+    prev = _row(ema_fast=10.6, ema_slow=10.0, rsi=85)
+    curr = _row(ema_fast=10.6, ema_slow=10.0, rsi=85)
     assert signal_for_row(prev, curr, cfg) == Signal.HOLD
 
 

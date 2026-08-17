@@ -2,11 +2,14 @@
 no leverage) - the safest default for a bot that can be pointed at real
 funds. Pick one via strategy.mode in config.yaml.
 
-"ema_rsi" (default) - trend-following crossover:
-  Entry (BUY): the fast EMA crosses above the slow EMA (an emerging uptrend)
-               while RSI is below the overbought threshold (avoids buying
-               into an already-extended move).
-  Exit (SELL): the fast EMA crosses back below the slow EMA.
+"ema_rsi" (default) - trend-following:
+  Entry (BUY): the fast EMA is above the slow EMA (an uptrend, not
+               necessarily one that just started) while RSI is below the
+               overbought threshold (avoids buying into an already-extended
+               move). Doesn't require a fresh crossover on this exact
+               candle - it acts on any candle where the trend is already up,
+               so it catches moves that started before the bot last checked.
+  Exit (SELL): the fast EMA is below the slow EMA.
 
 "bollinger" - mean-reversion "floor/ceiling" bounce:
   Entry (BUY): price closes at or below the lower Bollinger Band (the
@@ -62,12 +65,9 @@ def _signal_ema_rsi(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> Si
     if pd.isna(prev["ema_fast"]) or pd.isna(prev["ema_slow"]) or pd.isna(curr["ema_fast"]) or pd.isna(curr["ema_slow"]):
         return Signal.HOLD
 
-    crossed_up = prev["ema_fast"] <= prev["ema_slow"] and curr["ema_fast"] > curr["ema_slow"]
-    crossed_down = prev["ema_fast"] >= prev["ema_slow"] and curr["ema_fast"] < curr["ema_slow"]
-
-    if crossed_up and curr["rsi"] < cfg.rsi_overbought:
+    if curr["ema_fast"] > curr["ema_slow"] and curr["rsi"] < cfg.rsi_overbought:
         return Signal.BUY
-    if crossed_down:
+    if curr["ema_fast"] < curr["ema_slow"]:
         return Signal.SELL
     return Signal.HOLD
 
