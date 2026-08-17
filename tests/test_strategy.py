@@ -41,3 +41,31 @@ def test_hold_when_indicators_not_ready():
     prev = _row(ema_fast=float("nan"), ema_slow=10.0, rsi=50)
     curr = _row(ema_fast=10.1, ema_slow=10.0, rsi=50)
     assert signal_for_row(prev, curr, cfg) == Signal.HOLD
+
+
+def _bb_row(close, bb_lower, bb_upper):
+    return pd.Series({"close": close, "bb_lower": bb_lower, "bb_upper": bb_upper})
+
+
+def test_bollinger_buy_when_price_at_or_below_lower_band():
+    cfg = StrategyConfig(mode="bollinger")
+    prev = curr = _bb_row(close=95.0, bb_lower=96.0, bb_upper=104.0)
+    assert signal_for_row(prev, curr, cfg) == Signal.BUY
+
+
+def test_bollinger_sell_when_price_at_or_above_upper_band():
+    cfg = StrategyConfig(mode="bollinger")
+    prev = curr = _bb_row(close=105.0, bb_lower=96.0, bb_upper=104.0)
+    assert signal_for_row(prev, curr, cfg) == Signal.SELL
+
+
+def test_bollinger_hold_when_price_between_bands():
+    cfg = StrategyConfig(mode="bollinger")
+    prev = curr = _bb_row(close=100.0, bb_lower=96.0, bb_upper=104.0)
+    assert signal_for_row(prev, curr, cfg) == Signal.HOLD
+
+
+def test_bollinger_hold_when_bands_not_ready():
+    cfg = StrategyConfig(mode="bollinger")
+    prev = curr = _bb_row(close=95.0, bb_lower=float("nan"), bb_upper=float("nan"))
+    assert signal_for_row(prev, curr, cfg) == Signal.HOLD

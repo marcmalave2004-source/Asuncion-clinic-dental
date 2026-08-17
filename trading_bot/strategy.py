@@ -1,19 +1,25 @@
-"""EMA-crossover + RSI-filter strategy.
+"""Two selectable long-only, spot-style entry/exit strategies (no shorting,
+no leverage) - the safest default for a bot that can be pointed at real
+funds. Pick one via strategy.mode in config.yaml.
 
-Long-only, spot-style logic (no shorting, no leverage) by design: it is the
-safest default for a bot that can be pointed at real funds.
+"ema_rsi" (default) - trend-following crossover:
+  Entry (BUY): the fast EMA crosses above the slow EMA (an emerging uptrend)
+               while RSI is below the overbought threshold (avoids buying
+               into an already-extended move).
+  Exit (SELL): the fast EMA crosses back below the slow EMA.
 
-Entry (BUY): the fast EMA crosses above the slow EMA (an emerging uptrend)
-             while RSI is below the overbought threshold (avoids buying into
-             an already-extended move).
-Exit (SELL): the fast EMA crosses back below the slow EMA, OR the position's
-             stop-loss/take-profit is hit (handled by risk.py against live
-             price, not here).
+"bollinger" - mean-reversion "floor/ceiling" bounce:
+  Entry (BUY): price closes at or below the lower Bollinger Band (the
+               "floor"), on the expectation it reverts back toward the mean.
+  Exit (SELL): price closes at or above the upper Bollinger Band (the
+               "ceiling").
 
-This is a reasonable, well-understood default - not a guarantee of
-profitability. Past performance of any indicator combination does not
-predict future returns; treat this as a starting point to tune and validate
-via the backtester, not as financial advice.
+Either way, the actual stop-loss/take-profit are ATR-based and handled by
+risk.py against live price, not here.
+
+Neither is a guarantee of profitability. Past performance of any indicator
+combination does not predict future returns; treat this as a starting point
+to tune and validate via the backtester, not as financial advice.
 """
 from __future__ import annotations
 
@@ -47,10 +53,12 @@ def prepare(df: pd.DataFrame, cfg: StrategyConfig) -> pd.DataFrame:
         ema_slow=cfg.ema_slow,
         rsi_period=cfg.rsi_period,
         atr_period=cfg.atr_period,
+        bb_period=cfg.bb_period,
+        bb_std_dev=cfg.bb_std_dev,
     )
 
 
-def signal_for_row(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> Signal:
+def _signal_ema_rsi(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> Signal:
     if pd.isna(prev["ema_fast"]) or pd.isna(prev["ema_slow"]) or pd.isna(curr["ema_fast"]) or pd.isna(curr["ema_slow"]):
         return Signal.HOLD
 
@@ -62,6 +70,23 @@ def signal_for_row(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> Sig
     if crossed_down:
         return Signal.SELL
     return Signal.HOLD
+
+
+def _signal_bollinger(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> Signal:
+    if pd.isna(curr["bb_upper"]) or pd.isna(curr["bb_lower"]):
+        return Signal.HOLD
+
+    if curr["close"] <= curr["bb_lower"]:
+        return Signal.BUY
+    if curr["close"] >= curr["bb_upper"]:
+        return Signal.SELL
+    return Signal.HOLD
+
+
+def signal_for_row(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> Signal:
+    if cfg.mode == "bollinger":
+        return _signal_bollinger(prev, curr, cfg)
+    return _signal_ema_rsi(prev, curr, cfg)
 
 
 def latest_decision(df: pd.DataFrame, cfg: StrategyConfig) -> StrategyDecision:

@@ -65,11 +65,17 @@ class ExchangeConfig:
 
 @dataclass
 class StrategyConfig:
+    mode: str = "ema_rsi"  # "ema_rsi" (crossover) or "bollinger" (buy at the lower band, sell at the upper band)
+
     ema_fast: int = 12
     ema_slow: int = 26
     rsi_period: int = 14
     rsi_overbought: float = 70.0
     rsi_oversold: float = 30.0
+
+    bb_period: int = 20      # bollinger mode only
+    bb_std_dev: float = 2.0  # bollinger mode only - band width in standard deviations
+
     atr_period: int = 14
     atr_stop_mult: float = 2.0
     atr_target_mult: float = 3.0

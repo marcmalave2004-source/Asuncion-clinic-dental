@@ -41,10 +41,25 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
-def add_indicators(df: pd.DataFrame, ema_fast: int, ema_slow: int, rsi_period: int, atr_period: int) -> pd.DataFrame:
+def bollinger_bands(series: pd.Series, period: int = 20, num_std: float = 2.0) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Returns (middle, upper, lower). middle is a simple moving average;
+    upper/lower are middle +/- num_std rolling standard deviations - the
+    "ceiling"/"floor" a mean-reversion strategy trades against."""
+    middle = series.rolling(window=period).mean()
+    std = series.rolling(window=period).std()
+    upper = middle + num_std * std
+    lower = middle - num_std * std
+    return middle, upper, lower
+
+
+def add_indicators(
+    df: pd.DataFrame, ema_fast: int, ema_slow: int, rsi_period: int, atr_period: int,
+    bb_period: int = 20, bb_std_dev: float = 2.0,
+) -> pd.DataFrame:
     out = df.copy()
     out["ema_fast"] = ema(out["close"], ema_fast)
     out["ema_slow"] = ema(out["close"], ema_slow)
     out["rsi"] = rsi(out["close"], rsi_period)
     out["atr"] = atr(out, atr_period)
+    out["bb_middle"], out["bb_upper"], out["bb_lower"] = bollinger_bands(out["close"], bb_period, bb_std_dev)
     return out
