@@ -93,8 +93,9 @@ def run_backtest(
     result = BacktestResult(initial_equity=initial_balance)
 
     cash = initial_balance
-    position = None  # dict: amount, entry_price, stop_loss, take_profit, entry_time
+    position = None  # dict: amount, entry_price, stop_loss, take_profit, entry_time, peak_price
     fee_rate = risk_cfg.taker_fee_pct / 100.0
+    trailing_stop_pct = risk_cfg.trailing_stop_pct
 
     for i in range(1, len(data)):
         prev_row, curr_row = data.iloc[i - 1], data.iloc[i]
@@ -102,13 +103,21 @@ def run_backtest(
         result.equity_curve.append(equity)
 
         if position is not None:
+            if curr_row["high"] > position["peak_price"]:
+                position["peak_price"] = float(curr_row["high"])
+
             exit_price = None
             reason = None
             if curr_row["low"] <= position["stop_loss"]:
                 exit_price, reason = position["stop_loss"], "stop_loss"
-            elif curr_row["high"] >= position["take_profit"]:
+            elif trailing_stop_pct > 0 and position["peak_price"] > position["entry_price"]:
+                trail_trigger = position["peak_price"] * (1 - trailing_stop_pct / 100.0)
+                # Only a real profit lock counts - never let the trail sit below entry.
+                if trail_trigger > position["entry_price"] and curr_row["low"] <= trail_trigger:
+                    exit_price, reason = trail_trigger, "trailing_stop"
+            if exit_price is None and curr_row["high"] >= position["take_profit"]:
                 exit_price, reason = position["take_profit"], "take_profit"
-            else:
+            if exit_price is None:
                 sig = signal_for_row(prev_row, curr_row, strategy_cfg)
                 if sig == Signal.SELL:
                     exit_price, reason = curr_row["close"], "signal"
@@ -153,6 +162,7 @@ def run_backtest(
                     "stop_loss": stop_loss,
                     "take_profit": take_profit,
                     "entry_time": curr_row["timestamp"],
+                    "peak_price": entry_price,
                 }
 
     final_equity = cash if position is None else cash + position["amount"] * data.iloc[-1]["close"]

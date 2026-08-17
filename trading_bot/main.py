@@ -46,19 +46,21 @@ def cli(ctx: click.Context, config_path: str):
 @click.option("--bb-std-dev", default=None, type=float, help="Override strategy.bb_std_dev for this run only (bollinger mode)")
 @click.option("--atr-stop-mult", default=None, type=float, help="Override strategy.atr_stop_mult for this run only")
 @click.option("--atr-target-mult", default=None, type=float, help="Override strategy.atr_target_mult for this run only")
+@click.option("--trailing-stop-pct", default=None, type=float, help="Override risk.trailing_stop_pct for this run only")
 @click.pass_context
 def backtest(
     ctx: click.Context, since: str, until: str | None, balance: float, symbol: str | None,
     mode: str | None, ema_fast: int | None, ema_slow: int | None, rsi_overbought: float | None,
     bb_period: int | None, bb_std_dev: float | None,
-    atr_stop_mult: float | None, atr_target_mult: float | None,
+    atr_stop_mult: float | None, atr_target_mult: float | None, trailing_stop_pct: float | None,
 ):
     """Run the strategy against historical data - no orders, no API keys needed
     for public exchanges or for the trading212 provider (uses Yahoo Finance).
 
-    The --mode/--ema-fast/--ema-slow/--rsi-overbought/--bb-*/--atr-*-mult
-    options override config.yaml's strategy section for this run only, to
-    compare parameter combinations without touching the live config."""
+    The --mode/--ema-fast/--ema-slow/--rsi-overbought/--bb-*/--atr-*-mult/
+    --trailing-stop-pct options override config.yaml's strategy/risk sections
+    for this run only, to compare parameter combinations without touching the
+    live config."""
     from trading_bot.backtester import run_backtest
     from trading_bot.market_data import build_market_data
 
@@ -79,6 +81,8 @@ def backtest(
         settings.strategy.atr_stop_mult = atr_stop_mult
     if atr_target_mult is not None:
         settings.strategy.atr_target_mult = atr_target_mult
+    if trailing_stop_pct is not None:
+        settings.risk.trailing_stop_pct = trailing_stop_pct
 
     instruments = settings.exchange.effective_instruments()
     available_symbols = [i.symbol for i in instruments]
@@ -110,13 +114,15 @@ def backtest(
         click.echo(
             f"Strategy: mode=bollinger bb_period={settings.strategy.bb_period} "
             f"bb_std_dev={settings.strategy.bb_std_dev} "
-            f"atr_stop_mult={settings.strategy.atr_stop_mult} atr_target_mult={settings.strategy.atr_target_mult}"
+            f"atr_stop_mult={settings.strategy.atr_stop_mult} atr_target_mult={settings.strategy.atr_target_mult} "
+            f"trailing_stop_pct={settings.risk.trailing_stop_pct}"
         )
     else:
         click.echo(
             f"Strategy: mode=ema_rsi ema={settings.strategy.ema_fast}/{settings.strategy.ema_slow} "
             f"rsi_overbought={settings.strategy.rsi_overbought} "
-            f"atr_stop_mult={settings.strategy.atr_stop_mult} atr_target_mult={settings.strategy.atr_target_mult}"
+            f"atr_stop_mult={settings.strategy.atr_stop_mult} atr_target_mult={settings.strategy.atr_target_mult} "
+            f"trailing_stop_pct={settings.risk.trailing_stop_pct}"
         )
     result = run_backtest(df, settings.strategy, settings.risk, initial_balance=balance)
     click.echo(f"[{symbol}] {result.summary()}")
