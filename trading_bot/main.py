@@ -35,14 +35,38 @@ def cli(ctx: click.Context, config_path: str):
     help="Which configured instrument to backtest (see exchange.instruments in config.yaml). "
          "Defaults to the first one configured. The backtester tests one instrument at a time.",
 )
+@click.option("--ema-fast", default=None, type=int, help="Override strategy.ema_fast for this run only")
+@click.option("--ema-slow", default=None, type=int, help="Override strategy.ema_slow for this run only")
+@click.option("--rsi-overbought", default=None, type=float, help="Override strategy.rsi_overbought for this run only")
+@click.option("--atr-stop-mult", default=None, type=float, help="Override strategy.atr_stop_mult for this run only")
+@click.option("--atr-target-mult", default=None, type=float, help="Override strategy.atr_target_mult for this run only")
 @click.pass_context
-def backtest(ctx: click.Context, since: str, until: str | None, balance: float, symbol: str | None):
+def backtest(
+    ctx: click.Context, since: str, until: str | None, balance: float, symbol: str | None,
+    ema_fast: int | None, ema_slow: int | None, rsi_overbought: float | None,
+    atr_stop_mult: float | None, atr_target_mult: float | None,
+):
     """Run the strategy against historical data - no orders, no API keys needed
-    for public exchanges or for the trading212 provider (uses Yahoo Finance)."""
+    for public exchanges or for the trading212 provider (uses Yahoo Finance).
+
+    The --ema-fast/--ema-slow/--rsi-overbought/--atr-*-mult options override
+    config.yaml's strategy section for this run only, to compare parameter
+    combinations without touching the live config."""
     from trading_bot.backtester import run_backtest
     from trading_bot.market_data import build_market_data
 
     settings = ctx.obj["settings"]
+    if ema_fast is not None:
+        settings.strategy.ema_fast = ema_fast
+    if ema_slow is not None:
+        settings.strategy.ema_slow = ema_slow
+    if rsi_overbought is not None:
+        settings.strategy.rsi_overbought = rsi_overbought
+    if atr_stop_mult is not None:
+        settings.strategy.atr_stop_mult = atr_stop_mult
+    if atr_target_mult is not None:
+        settings.strategy.atr_target_mult = atr_target_mult
+
     instruments = settings.exchange.effective_instruments()
     available_symbols = [i.symbol for i in instruments]
     if symbol is None:
@@ -69,8 +93,13 @@ def backtest(ctx: click.Context, since: str, until: str | None, balance: float, 
         sys.exit(1)
 
     click.echo(f"Got {len(df)} candles. Running backtest...")
+    click.echo(
+        f"Strategy: ema={settings.strategy.ema_fast}/{settings.strategy.ema_slow} "
+        f"rsi_overbought={settings.strategy.rsi_overbought} "
+        f"atr_stop_mult={settings.strategy.atr_stop_mult} atr_target_mult={settings.strategy.atr_target_mult}"
+    )
     result = run_backtest(df, settings.strategy, settings.risk, initial_balance=balance)
-    click.echo(result.summary())
+    click.echo(f"[{symbol}] {result.summary()}")
 
 
 @cli.command(name="check-broker")
