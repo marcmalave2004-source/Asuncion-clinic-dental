@@ -300,6 +300,32 @@ risk:
 Nunca se activa si la operación está en pérdida (para eso ya está el
 stop-loss normal) — solo protege ganancias ya conseguidas.
 
+### Buscando más beneficio: barrido real con el trailing stop activado
+
+Con el trailing stop ya simulado en el backtester (`backtester.py`), se
+lanzó un barrido real (no simulado a mano) vía el workflow
+`backtest.yml` sobre TSLA/SPY/QQQ/NVDA/AAPL (2026-06-20 a 2026-08-17,
+velas de 15 min):
+
+- Con `ema=8/18 rsi_overbought=80 atr_target_mult=4.5` fijos, variar
+  `trailing_stop_pct` (0 / 1.0 / 1.5 / 2.5) en TSLA mostró que **1.5%
+  era ya el mejor valor** de los probados (+5.10% de retorno, profit
+  factor 1.43) — en SPY el trailing stop no cambió ningún resultado en
+  esta ventana (ninguna de las 22 operaciones llegó a activarlo).
+- Variar además `atr_stop_mult` (1.0 / 1.5 / 2.0) × `atr_target_mult`
+  (3.5 / 4.5 / 5.5) encontró una combinación mejor: **`atr_stop_mult:
+  1.0`** (stop más ajustado, en vez de 1.5) con el resto igual dio
+  **+6.24% en TSLA** (antes +5.10%), profit factor 1.67 (antes 1.43) y
+  **menor** drawdown máximo (5.61% frente a 6.78%) — no es un
+  intercambio riesgo/beneficio, es estrictamente mejor en las tres
+  métricas a la vez. Se comprobó que tampoco empeora SPY/QQQ/NVDA/AAPL
+  con esos mismos parámetros. Esta es la configuración activa ahora en
+  `config/config.yaml`.
+
+Como siempre: son ~24 operaciones en una sola ventana de ~2 meses, no
+una garantía de resultados futuros — sirve para comparar configuraciones
+entre sí con datos reales, no para prometer rentabilidad.
+
 ## Ejecutarlo 24/7 sin ordenador propio (GitHub Actions)
 
 En vez de dejar el bot corriendo en un bucle infinito en tu máquina/Codespace
