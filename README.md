@@ -326,6 +326,44 @@ Como siempre: son ~24 operaciones en una sola ventana de ~2 meses, no
 una garantía de resultados futuros — sirve para comparar configuraciones
 entre sí con datos reales, no para prometer rentabilidad.
 
+### Entrada menos estricta + operaciones más cortas
+
+En `strategy.py`, la entrada del modo `ema_rsi` ya no exige que el cruce
+de EMAs ocurra justo en la vela evaluada — antes solo compraba en la vela
+exacta donde la EMA rápida cruzaba por encima de la lenta, lo que hacía
+que se perdiera cualquier tendencia que ya llevara un rato subiendo.
+Ahora compra en cualquier vela donde la tendencia ya esté al alza (EMA
+rápida por encima de la lenta) con el RSI por debajo del umbral — capta
+subidas ya empezadas, no solo el instante exacto del cruce.
+
+Este cambio, combinado con un `trailing_stop_pct` mucho más ajustado
+(para que las operaciones duren lo mínimo necesario en vez de esperar el
+máximo beneficio), se validó con otro barrido real sobre TSLA (mismos
+`ema=8/18 rsi_overbought=80 atr_stop_mult=1.0 atr_target_mult=4.5`,
+2026-06-20 a 2026-08-17):
+
+| trailing_stop_pct | Operaciones | Win rate | Retorno |
+|---|---|---|---|
+| 1.5% (antes) | 65 | 29.2% | +5.80% |
+| 1.0% | 79 | 34.2% | -1.87% |
+| 0.8% | 77 | 44.2% | -1.05% |
+| 0.5% | 122 | 56.6% | -5.84% |
+| **0.3% (elegido)** | **156** | **68.6%** | **+4.92%** |
+| 0.2% | 176 | 72.2% | +13.28% |
+
+El valor exacto que "gana" salta mucho entre pruebas (0.2% da el mejor
+retorno, pero 0.4%/0.5%/0.8%/1.0% salen todos negativos) — con solo ~2
+meses de datos eso es una señal de ruido/sobreajuste, no una relación
+fiable. Se eligió **0.3%** como punto intermedio razonable en vez de
+perseguir el número más alto del barrido: ya cumple lo que se pedía
+(operaciones mucho más cortas y frecuentes, win rate alto) sin apostar
+todo a un valor que podría ser solo suerte en esta ventana concreta.
+En QQQ y AAPL este mismo cambio dio resultados negativos en esta ventana
+(la entrada más suelta no les sienta bien a todos los instrumentos por
+igual) — el bot usa una sola configuración global para los 10
+instrumentos, así que es un compromiso, no una mejora garantizada en
+todos ellos.
+
 ## Ejecutarlo 24/7 sin ordenador propio (GitHub Actions)
 
 En vez de dejar el bot corriendo en un bucle infinito en tu máquina/Codespace
