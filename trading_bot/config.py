@@ -88,6 +88,12 @@ class RiskConfig:
     max_open_positions: int = 1
     min_order_quote: float = 10.0
     taker_fee_pct: float = 0.1
+    # Once a position is showing a profit, exit as soon as price pulls back
+    # this many percent from its peak since entry - locks in small gains
+    # instead of holding out for the take-profit/opposite-signal exit.
+    # 0.0 (default) disables this and only ever exits on stop-loss,
+    # take-profit, or the strategy's own signal/session-close logic.
+    trailing_stop_pct: float = 0.0
 
 
 @dataclass

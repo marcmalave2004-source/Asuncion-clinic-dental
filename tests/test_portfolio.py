@@ -25,6 +25,51 @@ def test_unrealized_pnl():
     assert pos.unrealized_pnl(current_price=110.0) == 20.0
 
 
+def test_peak_price_starts_at_entry_price():
+    pos = _position(entry=100.0)
+    assert pos.peak_price == 100.0
+
+
+def test_update_peak_tracks_the_highest_price_seen():
+    pos = _position(entry=100.0)
+    pos.update_peak(105.0)
+    pos.update_peak(103.0)  # a pullback should not lower the recorded peak
+    pos.update_peak(108.0)
+    assert pos.peak_price == 108.0
+
+
+def test_trailing_stop_disabled_by_default():
+    pos = _position(entry=100.0, stop=90.0, target=200.0)
+    pos.update_peak(110.0)
+    # Even a big pullback from the peak shouldn't exit without trailing_stop_pct set.
+    assert pos.exit_reason(current_price=101.0) is None
+
+
+def test_trailing_stop_triggers_after_pullback_from_peak_while_still_in_profit():
+    pos = _position(entry=100.0, stop=90.0, target=200.0)
+    pos.update_peak(110.0)
+    # 2% below the 110 peak is 107.8, and 105 is still above the 100 entry.
+    assert pos.exit_reason(current_price=105.0, trailing_stop_pct=2.0) == "trailing_stop"
+
+
+def test_trailing_stop_does_not_trigger_before_reaching_the_pullback_threshold():
+    pos = _position(entry=100.0, stop=90.0, target=200.0)
+    pos.update_peak(110.0)
+    assert pos.exit_reason(current_price=109.0, trailing_stop_pct=2.0) is None
+
+
+def test_trailing_stop_never_fires_at_a_net_loss():
+    pos = _position(entry=100.0, stop=90.0, target=200.0)
+    pos.update_peak(101.0)  # barely above entry, so a 2% trail sits below entry
+    assert pos.exit_reason(current_price=95.0, trailing_stop_pct=2.0) is None
+
+
+def test_hard_stop_loss_takes_priority_over_trailing_stop():
+    pos = _position(entry=100.0, stop=90.0, target=200.0)
+    pos.update_peak(110.0)
+    assert pos.exit_reason(current_price=89.0, trailing_stop_pct=2.0) == "stop_loss"
+
+
 def test_position_store_round_trips_multiple_symbols(tmp_path):
     store = PositionStore(path=str(tmp_path / "positions.json"))
     positions = {

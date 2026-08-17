@@ -260,6 +260,46 @@ abajo): esto amplía a más acciones/ETFs dentro de tu cuenta Invest/ISA, pero
 no habilita índices ni opciones — esos no están disponibles en la API de
 T212 sea cual sea la configuración.
 
+### Segunda estrategia: Bandas de Bollinger (rebote suelo/techo)
+
+Además del cruce de EMA (por defecto), hay una segunda estrategia
+seleccionable con `strategy.mode: bollinger` — en vez de seguir tendencia,
+compra cuando el precio toca la banda inferior ("suelo") esperando que
+rebote hacia la media, y vende al tocar la banda superior ("techo"):
+
+```yaml
+strategy:
+  mode: bollinger
+  bb_period: 20
+  bb_std_dev: 1.0   # bandas más estrechas = más señales, pero más ruido
+```
+
+**Dato real de un backtest propio (TSLA/SPY, ~2 meses, velas de 15 min):**
+Bollinger fue **rentable en SPY** (+4% con bandas estrechas) pero **perdió
+bastante en TSLA** (-12%). Tiene sentido: el rebote suelo/techo funciona en
+mercados que oscilan dentro de un rango (como un ETF diversificado), pero
+sale mal parado en una acción con tendencias fuertes como TSLA, donde el
+precio sigue rompiendo el suelo/techo en vez de volver a la media. El bot
+solo permite una estrategia global para todos los instrumentos configurados
+a la vez, no una distinta por símbolo.
+
+### Trailing stop: asegurar ganancias antes de tiempo
+
+Por defecto (`risk.trailing_stop_pct: 0.0`, desactivado) el bot solo vende
+al tocar el stop-loss, el take-profit, o la señal contraria de la
+estrategia — puede que eso signifique esperar mucho para cerrar una
+operación que ya iba ganando. Con `trailing_stop_pct` activado, en cuanto la
+posición está en ganancia, el bot vende tan pronto como el precio retrocede
+ese % desde su máximo desde la entrada, aunque sea una ganancia pequeña:
+
+```yaml
+risk:
+  trailing_stop_pct: 1.5   # vende si el precio cae un 1.5% desde su máximo, una vez en ganancia
+```
+
+Nunca se activa si la operación está en pérdida (para eso ya está el
+stop-loss normal) — solo protege ganancias ya conseguidas.
+
 ## Ejecutarlo 24/7 sin ordenador propio (GitHub Actions)
 
 En vez de dejar el bot corriendo en un bucle infinito en tu máquina/Codespace

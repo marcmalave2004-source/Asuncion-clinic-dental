@@ -18,15 +18,28 @@ class Position:
     entry_price: float
     stop_loss: float
     take_profit: float
+    peak_price: float = 0.0  # highest price seen since entry; 0.0 at creation means "use entry_price"
+
+    def __post_init__(self):
+        if self.peak_price <= 0.0:
+            self.peak_price = self.entry_price
 
     def unrealized_pnl(self, current_price: float) -> float:
         return (current_price - self.entry_price) * self.amount
 
-    def exit_reason(self, current_price: float) -> str | None:
+    def update_peak(self, current_price: float) -> None:
+        if current_price > self.peak_price:
+            self.peak_price = current_price
+
+    def exit_reason(self, current_price: float, trailing_stop_pct: float = 0.0) -> str | None:
         if current_price <= self.stop_loss:
             return "stop_loss"
         if current_price >= self.take_profit:
             return "take_profit"
+        if trailing_stop_pct > 0 and self.peak_price > self.entry_price:
+            trail_trigger = self.peak_price * (1 - trailing_stop_pct / 100.0)
+            if current_price > self.entry_price and current_price <= trail_trigger:
+                return "trailing_stop"
         return None
 
 

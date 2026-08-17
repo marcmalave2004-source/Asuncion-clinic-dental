@@ -91,14 +91,17 @@ def run_loop(settings: Settings, max_iterations: int | None = None) -> None:
             # Exits are evaluated unconditionally - the kill switch and
             # session close only ever block opening *new* positions, never
             # managing ones that already exist.
+            positions_changed = False
             for symbol in list(positions.keys()):
                 if symbol not in prepared_by_symbol:
                     continue
                 prepared = prepared_by_symbol[symbol]
                 current_price = prices[symbol]
                 position = positions[symbol]
+                position.update_peak(current_price)
+                positions_changed = True
 
-                reason = position.exit_reason(current_price)
+                reason = position.exit_reason(current_price, trailing_stop_pct=settings.risk.trailing_stop_pct)
                 if reason is None:
                     prev_row, curr_row = prepared.iloc[-2], prepared.iloc[-1]
                     if signal_for_row(prev_row, curr_row, settings.strategy) == Signal.SELL:
@@ -109,7 +112,9 @@ def run_loop(settings: Settings, max_iterations: int | None = None) -> None:
                 if reason is not None:
                     executor.place_order(symbol, "sell", position.amount, current_price, note=f"exit:{reason}")
                     del positions[symbol]
-                    position_store.save_all(positions)
+
+            if positions_changed:
+                position_store.save_all(positions)
 
             # New entries: gated by the kill switch, session close, and
             # max_open_positions. balance_remaining is decremented locally

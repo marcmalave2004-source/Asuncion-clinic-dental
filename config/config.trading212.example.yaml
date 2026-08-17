@@ -24,11 +24,14 @@ exchange:
   #     t212_ticker: VOO_US_EQ
 
 strategy:
+  mode: ema_rsi   # "ema_rsi" (trend-following crossover) or "bollinger" (mean-reversion floor/ceiling bounce)
   ema_fast: 12
   ema_slow: 26
   rsi_period: 14
   rsi_overbought: 70
   rsi_oversold: 30
+  bb_period: 20      # bollinger mode only
+  bb_std_dev: 2.0     # bollinger mode only
   atr_period: 14
   atr_stop_mult: 2.0
   atr_target_mult: 3.0
@@ -39,6 +42,8 @@ risk:
   max_open_positions: 1
   min_order_quote: 10.0   # T212 supports fractional shares, so this can be small
   taker_fee_pct: 0.0       # T212 is commission-free on Invest/ISA trades
+  trailing_stop_pct: 0.0   # 0 = disabled. Set e.g. 1.5 to exit as soon as price pulls back 1.5% from
+                            # its peak once a position is in profit, instead of waiting for take_profit/signal
 
 runtime:
   poll_interval_seconds: 3600   # hourly is plenty for a daily-bar strategy
