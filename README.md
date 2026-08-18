@@ -416,6 +416,29 @@ Si el rendimiento en vivo no aguanta, volver a `mode: ema_rsi` (con
 `ema_fast: 8`, `ema_slow: 18`, `rsi_overbought: 80`) es un cambio de
 configuración de un minuto, no hay nada que deshacer.
 
+### Ampliación a 75 instrumentos
+
+De los 10 originales se pasó a 75 (72 acciones + 3 ETF), organizados en
+tres niveles según cuánto se han validado con datos reales:
+
+- **Nivel 1 (7 acciones):** las probadas desde el principio, todas rentables.
+- **Nivel 2 (64 acciones):** el grueso de la ampliación. Solo se muestreó
+  un puñado (COIN, JPM, KO, CRWD, RIVN) antes de activarlo, no las 64 una
+  por una — sería un número enorme de backtests. 4 de esas 5 salieron
+  rentables (COIN +58.93%, RIVN +55.85%, CRWD +20.35%, KO +10.29%); JPM
+  dio negativo (-5.06%) y se bajó al nivel 3. El patrón de "acciones sí,
+  ETFs no" se sostiene en 11/12 probadas, lo cual da una base razonable
+  para esperar que se generalice al resto — pero es una inferencia, no
+  una garantía símbolo a símbolo.
+- **Nivel 3 (4 símbolos):** JPM + los 3 ETFs, todos probados y confirmados
+  planos o negativos con este modo, al final de la lista para que casi
+  nunca les toque entrar.
+
+**Aviso operativo:** con 75 símbolos a consultar cada ciclo de 5 minutos
+en vez de 10, hay más carga sobre Yahoo Finance (que no es una API oficial
+ni tiene garantías de estabilidad) — si empiezan a fallar ciclos por
+timeouts o bloqueos, ese es el sospechoso número uno a revisar.
+
 ## Ejecutarlo 24/7 sin ordenador propio (GitHub Actions)
 
 En vez de dejar el bot corriendo en un bucle infinito en tu máquina/Codespace
