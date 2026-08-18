@@ -144,6 +144,89 @@ class Settings:
         return not self.live_trading_authorized
 
 
+VALID_STRATEGY_MODES = ("ema_rsi", "bollinger", "momentum")
+VALID_PROVIDERS = ("ccxt", "trading212")
+VALID_T212_ENVIRONMENTS = ("demo", "live")
+
+
+def _validate(settings: Settings) -> None:
+    """Fail fast and loud on a nonsensical config, instead of the bot
+    silently never trading (or misbehaving) because of a typo like
+    strategy.mode: "momentun" or a negative trailing_stop_pct. Collects
+    every problem found instead of stopping at the first one."""
+    errors: list[str] = []
+
+    if settings.exchange.provider not in VALID_PROVIDERS:
+        errors.append(f"exchange.provider must be one of {VALID_PROVIDERS}, got {settings.exchange.provider!r}")
+    if settings.exchange.provider == "trading212" and settings.exchange.t212_environment not in VALID_T212_ENVIRONMENTS:
+        errors.append(
+            f"exchange.t212_environment must be one of {VALID_T212_ENVIRONMENTS}, "
+            f"got {settings.exchange.t212_environment!r}"
+        )
+    instruments = settings.exchange.effective_instruments()
+    if not instruments:
+        errors.append("exchange.instruments (or exchange.symbol) must configure at least one instrument")
+    for instrument in instruments:
+        if not instrument.symbol:
+            errors.append("every instrument needs a non-empty symbol")
+        if settings.exchange.provider == "trading212" and not instrument.t212_ticker:
+            errors.append(f"instrument {instrument.symbol!r} needs a t212_ticker for the trading212 provider")
+
+    if settings.strategy.mode not in VALID_STRATEGY_MODES:
+        errors.append(f"strategy.mode must be one of {VALID_STRATEGY_MODES}, got {settings.strategy.mode!r}")
+    if settings.strategy.ema_fast >= settings.strategy.ema_slow:
+        errors.append(
+            f"strategy.ema_fast ({settings.strategy.ema_fast}) must be less than "
+            f"strategy.ema_slow ({settings.strategy.ema_slow})"
+        )
+    if not 0 < settings.strategy.rsi_overbought <= 100:
+        errors.append(f"strategy.rsi_overbought must be between 0 and 100, got {settings.strategy.rsi_overbought}")
+    if not 0 <= settings.strategy.rsi_oversold < 100:
+        errors.append(f"strategy.rsi_oversold must be between 0 and 100, got {settings.strategy.rsi_oversold}")
+    if settings.strategy.rsi_oversold >= settings.strategy.rsi_overbought:
+        errors.append("strategy.rsi_oversold must be less than strategy.rsi_overbought")
+    if settings.strategy.atr_period <= 0:
+        errors.append(f"strategy.atr_period must be positive, got {settings.strategy.atr_period}")
+    if settings.strategy.atr_stop_mult <= 0:
+        errors.append(f"strategy.atr_stop_mult must be positive, got {settings.strategy.atr_stop_mult}")
+    if settings.strategy.atr_target_mult <= 0:
+        errors.append(f"strategy.atr_target_mult must be positive, got {settings.strategy.atr_target_mult}")
+    if settings.strategy.bb_period <= 0:
+        errors.append(f"strategy.bb_period must be positive, got {settings.strategy.bb_period}")
+    if settings.strategy.bb_std_dev <= 0:
+        errors.append(f"strategy.bb_std_dev must be positive, got {settings.strategy.bb_std_dev}")
+
+    if not 0 < settings.risk.risk_per_trade_pct <= 100:
+        errors.append(f"risk.risk_per_trade_pct must be between 0 and 100, got {settings.risk.risk_per_trade_pct}")
+    if not 0 < settings.risk.max_daily_loss_pct <= 100:
+        errors.append(f"risk.max_daily_loss_pct must be between 0 and 100, got {settings.risk.max_daily_loss_pct}")
+    if settings.risk.max_open_positions < 1:
+        errors.append(f"risk.max_open_positions must be at least 1, got {settings.risk.max_open_positions}")
+    if settings.risk.min_order_quote < 0:
+        errors.append(f"risk.min_order_quote cannot be negative, got {settings.risk.min_order_quote}")
+    if settings.risk.taker_fee_pct < 0:
+        errors.append(f"risk.taker_fee_pct cannot be negative, got {settings.risk.taker_fee_pct}")
+    if settings.risk.trailing_stop_pct < 0:
+        errors.append(f"risk.trailing_stop_pct cannot be negative, got {settings.risk.trailing_stop_pct}")
+
+    if settings.runtime.poll_interval_seconds <= 0:
+        errors.append(f"runtime.poll_interval_seconds must be positive, got {settings.runtime.poll_interval_seconds}")
+
+    if settings.session.enabled:
+        if settings.session.close_buffer_minutes < 0:
+            errors.append(f"session.close_buffer_minutes cannot be negative, got {settings.session.close_buffer_minutes}")
+        try:
+            hour_str, minute_str = settings.session.close_time.split(":")
+            if not (0 <= int(hour_str) <= 23 and 0 <= int(minute_str) <= 59):
+                raise ValueError
+        except ValueError:
+            errors.append(f"session.close_time must be in HH:MM 24h format, got {settings.session.close_time!r}")
+
+    if errors:
+        details = "\n  - ".join(errors)
+        raise ValueError(f"Invalid configuration ({len(errors)} problem(s)):\n  - {details}")
+
+
 def _load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -175,7 +258,7 @@ def load_settings(config_path: str | os.PathLike = "config/config.yaml") -> Sett
     live_requested = os.getenv("LIVE_TRADING", "false").strip().lower() == "true"
     live_confirmed = os.getenv("LIVE_TRADING_CONFIRM", "") == LIVE_CONFIRM_PHRASE
 
-    return Settings(
+    settings = Settings(
         exchange=exchange,
         strategy=strategy,
         risk=risk,
@@ -186,3 +269,5 @@ def load_settings(config_path: str | os.PathLike = "config/config.yaml") -> Sett
         live_trading_requested=live_requested,
         live_trading_confirmed=live_confirmed,
     )
+    _validate(settings)
+    return settings
