@@ -60,6 +60,38 @@ def test_hold_when_indicators_not_ready():
     assert signal_for_row(prev, curr, cfg) == Signal.HOLD
 
 
+def _mom_row(close):
+    return pd.Series({"close": close})
+
+
+def test_momentum_buy_on_any_uptick():
+    cfg = StrategyConfig(mode="momentum")
+    prev = _mom_row(close=100.0)
+    curr = _mom_row(close=100.01)
+    assert signal_for_row(prev, curr, cfg) == Signal.BUY
+
+
+def test_momentum_sell_on_any_downtick():
+    cfg = StrategyConfig(mode="momentum")
+    prev = _mom_row(close=100.0)
+    curr = _mom_row(close=99.99)
+    assert signal_for_row(prev, curr, cfg) == Signal.SELL
+
+
+def test_momentum_hold_when_price_unchanged():
+    cfg = StrategyConfig(mode="momentum")
+    prev = _mom_row(close=100.0)
+    curr = _mom_row(close=100.0)
+    assert signal_for_row(prev, curr, cfg) == Signal.HOLD
+
+
+def test_momentum_hold_when_price_not_ready():
+    cfg = StrategyConfig(mode="momentum")
+    prev = _mom_row(close=float("nan"))
+    curr = _mom_row(close=100.0)
+    assert signal_for_row(prev, curr, cfg) == Signal.HOLD
+
+
 def _bb_row(close, bb_lower, bb_upper):
     return pd.Series({"close": close, "bb_lower": bb_lower, "bb_upper": bb_upper})
 

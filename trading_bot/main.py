@@ -36,7 +36,7 @@ def cli(ctx: click.Context, config_path: str):
          "Defaults to the first one configured. The backtester tests one instrument at a time.",
 )
 @click.option(
-    "--mode", default=None, type=click.Choice(["ema_rsi", "bollinger"]),
+    "--mode", default=None, type=click.Choice(["ema_rsi", "bollinger", "momentum"]),
     help="Override strategy.mode for this run only",
 )
 @click.option("--ema-fast", default=None, type=int, help="Override strategy.ema_fast for this run only")
@@ -114,6 +114,12 @@ def backtest(
         click.echo(
             f"Strategy: mode=bollinger bb_period={settings.strategy.bb_period} "
             f"bb_std_dev={settings.strategy.bb_std_dev} "
+            f"atr_stop_mult={settings.strategy.atr_stop_mult} atr_target_mult={settings.strategy.atr_target_mult} "
+            f"trailing_stop_pct={settings.risk.trailing_stop_pct}"
+        )
+    elif settings.strategy.mode == "momentum":
+        click.echo(
+            f"Strategy: mode=momentum (buy any uptick, sell any downtick) "
             f"atr_stop_mult={settings.strategy.atr_stop_mult} atr_target_mult={settings.strategy.atr_target_mult} "
             f"trailing_stop_pct={settings.risk.trailing_stop_pct}"
         )

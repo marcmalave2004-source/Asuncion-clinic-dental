@@ -65,7 +65,7 @@ class ExchangeConfig:
 
 @dataclass
 class StrategyConfig:
-    mode: str = "ema_rsi"  # "ema_rsi" (crossover) or "bollinger" (buy at the lower band, sell at the upper band)
+    mode: str = "ema_rsi"  # "ema_rsi" (trend), "bollinger" (buy at the lower band, sell at the upper band), or "momentum" (buy any uptick, sell any downtick - no trend/RSI filter)
 
     ema_fast: int = 12
     ema_slow: int = 26

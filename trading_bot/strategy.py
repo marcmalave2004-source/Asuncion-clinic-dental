@@ -17,6 +17,18 @@ funds. Pick one via strategy.mode in config.yaml.
   Exit (SELL): price closes at or above the upper Bollinger Band (the
                "ceiling").
 
+"momentum" - pure short-term scalping, no trend/RSI filter at all:
+  Entry (BUY): this candle closed higher than the previous one - any tiny
+               uptick, no confirmation required.
+  Exit (SELL): this candle closed lower than the previous one.
+  Meant to be paired with a very tight trailing_stop_pct so it grabs small,
+  frequent gains instead of waiting for a confirmed trend. Because it reacts
+  to single-candle noise instead of a trend, expect many more trades but a
+  much weaker edge per trade - validate with the backtester before trusting
+  it with real money, and remember the backtester assumes a perfect fill at
+  the candle's close with no spread, which matters a lot more here than for
+  the other two modes given how small each trade's target profit is.
+
 Either way, the actual stop-loss/take-profit are ATR-based and handled by
 risk.py against live price, not here.
 
@@ -83,9 +95,22 @@ def _signal_bollinger(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> 
     return Signal.HOLD
 
 
+def _signal_momentum(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> Signal:
+    if pd.isna(prev["close"]) or pd.isna(curr["close"]):
+        return Signal.HOLD
+
+    if curr["close"] > prev["close"]:
+        return Signal.BUY
+    if curr["close"] < prev["close"]:
+        return Signal.SELL
+    return Signal.HOLD
+
+
 def signal_for_row(prev: pd.Series, curr: pd.Series, cfg: StrategyConfig) -> Signal:
     if cfg.mode == "bollinger":
         return _signal_bollinger(prev, curr, cfg)
+    if cfg.mode == "momentum":
+        return _signal_momentum(prev, curr, cfg)
     return _signal_ema_rsi(prev, curr, cfg)
 
 
