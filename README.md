@@ -364,6 +364,58 @@ igual) — el bot usa una sola configuración global para los 10
 instrumentos, así que es un compromiso, no una mejora garantizada en
 todos ellos.
 
+### Tercera estrategia: momentum (compra en cualquier subida, vende en cualquier bajada)
+
+La más agresiva de las tres, sin ningún filtro de tendencia ni RSI —
+`strategy.mode: momentum`. Compra en cuanto la vela actual cierra por
+encima de la anterior (cualquier subida, por pequeña que sea) y vende en
+cuanto cierra por debajo. Pensada para emparejarse con un
+`trailing_stop_pct` muy ajustado (0.2%) para cazar ganancias mínimas y
+frecuentes en vez de esperar una tendencia confirmada.
+
+**Barrido real (2026-06-20 a 2026-08-18, velas de 15 min, atr_stop_mult:
+1.0, atr_target_mult: 4.5, trailing_stop_pct: 0.2)** — probado en los 10
+instrumentos por separado:
+
+| Instrumento | Retorno | Operaciones (~42 días) |
+|---|---|---|
+| AMD | +71.58% | 347 |
+| TSLA | +17.18% | 344 |
+| AMZN | +15.99% | 305 |
+| META | +9.36% | 328 |
+| NVDA | +7.65% | 318 |
+| MSFT | +6.50% | 315 |
+| AAPL | +3.27% | 313 |
+| SPY | +0.42% | 250 |
+| QQQ | -2.90% | 275 |
+| IWM | -5.56% | 297 |
+
+Patrón consistente: **rentable en las 7 acciones individuales, plano o
+negativo en los 3 ETFs** — a ese nivel de detalle (velas de 15 min), las
+acciones sueltas tienen más "ruido explotable" que los ETFs diversificados.
+
+Como el modo momentum da señal en casi cualquier vela, el bot elegiría
+casi siempre el primer instrumento de la lista con señal — por eso, al
+activar este modo (2026-08-18), se reordenó `exchange.instruments` para
+poner las 7 acciones primero (por retorno del backtest) y los 3 ETFs al
+final, donde apenas les tocará entrar.
+
+**Dos avisos reales, no solo teóricos:**
+- El +71.58% de AMD probablemente está inflado por el interés compuesto:
+  con `risk_per_trade_pct: 100%` reinvirtiendo todo el saldo en cada una
+  de las 347 operaciones, una buena racha se multiplica muy rápido — es
+  una señal real (positiva en 7/7 acciones, no es casualidad de una sola),
+  pero esa magnitud concreta no es algo que se pueda esperar que se repita.
+- El backtest asume que cada operación se ejecuta exactamente al precio
+  de cierre de la vela, sin diferencia entre compra y venta (spread). Con
+  objetivos de beneficio tan pequeños (0.2%), el spread real de Trading
+  212 podría comerse parte de esa ventaja de una forma que el backtest no
+  puede ver — hay que vigilar el rendimiento real los primeros días.
+
+Si el rendimiento en vivo no aguanta, volver a `mode: ema_rsi` (con
+`ema_fast: 8`, `ema_slow: 18`, `rsi_overbought: 80`) es un cambio de
+configuración de un minuto, no hay nada que deshacer.
+
 ## Ejecutarlo 24/7 sin ordenador propio (GitHub Actions)
 
 En vez de dejar el bot corriendo en un bucle infinito en tu máquina/Codespace

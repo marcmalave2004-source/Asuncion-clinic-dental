@@ -24,7 +24,7 @@ exchange:
   #     t212_ticker: VOO_US_EQ
 
 strategy:
-  mode: ema_rsi   # "ema_rsi" (trend-following crossover) or "bollinger" (mean-reversion floor/ceiling bounce)
+  mode: ema_rsi   # "ema_rsi" (trend-following), "bollinger" (mean-reversion floor/ceiling bounce), or "momentum" (buy any uptick, sell any downtick - no trend/RSI filter, much higher trade frequency)
   ema_fast: 12
   ema_slow: 26
   rsi_period: 14
